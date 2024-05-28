@@ -1,16 +1,34 @@
 <script>
-	import Counter from './Counter.svelte';
-	import welcome from '$lib/images/svelte-welcome.webp';
-	import welcome_fallback from '$lib/images/svelte-welcome.png';
-
 	import { invoke } from '@tauri-apps/api/tauri';
 	import { listen } from '@tauri-apps/api/event';
 
 	(async () => {
-	const unlisten = await listen('scr-event', (event) => {
-		console.log('click event', event);
-	});
+		const unlisten = await listen('scr-event', (event) => {
+			console.log('click event', event.payload);
+
+			if (event.payload.ProfileSelect) {
+				ourAlias = event.payload.ProfileSelect.alias;
+				ourGateway = event.payload.ProfileSelect.gateway;
+			} else if (event.payload.MatchFound) {
+				player1Alias = event.payload.MatchFound.player1.alias;
+				player1Gateway = event.payload.MatchFound.player1.gateway;
+				player2Alias = event.payload.MatchFound.player2.alias;
+				player2Gateway = event.payload.MatchFound.player2.gateway;
+				map = event.payload.MatchFound.map
+			}
+		});
 	})();
+
+	$: ourAlias = null;
+	$: ourGateway = null;
+
+	$: player1Alias = null;
+	$: player1Gateway = null;
+
+	$: player2Alias = null;
+	$: player2Gateway = null;
+
+	$: map = null;
 
 	invoke('init_process');
 </script>
@@ -21,50 +39,35 @@
 </svelte:head>
 
 <section>
-	<h1>
-		<span class="welcome">
-			<picture>
-				<source srcset={welcome} type="image/webp" />
-				<img src={welcome_fallback} alt="Welcome" />
-			</picture>
-		</span>
-
-		to your new<br />SvelteKit app
-	</h1>
-
-	<h2>
-		try editing <strong>src/routes/+page.svelte</strong>
-	</h2>
-
-	<Counter />
+	<table border=1>
+		<tr>
+			<td>Our Alias</td>
+			<td>{ourAlias}</td>
+		</tr>
+		<tr>
+			<td>Our Gateway</td>
+			<td>{ourGateway}</td>
+		</tr>
+	</table>
+</section>
+<section>
+	<table border=1>
+		<tr>
+			<td>Player 1</td>
+			<td>{player1Alias}</td>
+			<td>{player1Gateway}</td>
+		</tr>
+		<tr>
+			<td>Player 2</td>
+			<td>{player2Alias}</td>
+			<td>{player2Gateway}</td>
+		</tr>
+		<tr>
+			<td>Map</td>
+			<td>{map}</td>
+		</tr>
+	</table>
 </section>
 
 <style>
-	section {
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
-		align-items: center;
-		flex: 0.6;
-	}
-
-	h1 {
-		width: 100%;
-	}
-
-	.welcome {
-		display: block;
-		position: relative;
-		width: 100%;
-		height: 0;
-		padding: 0 0 calc(100% * 495 / 2048) 0;
-	}
-
-	.welcome img {
-		position: absolute;
-		width: 100%;
-		height: 100%;
-		top: 0;
-		display: block;
-	}
 </style>

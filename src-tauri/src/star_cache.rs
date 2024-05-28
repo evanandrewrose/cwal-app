@@ -24,7 +24,7 @@ struct CacheEntry {
 }
 
 pub struct StarCache {
-    watcher: notify::PollWatcher,
+    _watcher: notify::PollWatcher,
 }
 
 /// Watches the StarCraft cache directory and invokes the provided event handler with the url
@@ -51,7 +51,7 @@ impl StarCache {
         }
 
         StarCache {
-            watcher,
+            _watcher: watcher,
         }
     }
 
@@ -140,7 +140,7 @@ impl StarCache {
         // todo: new result type
         let entries: Vec<CacheEntry> = entries?
             .map(|mut entry| {
-                let last_used: DateTime<Local> = entry.get_rankings_node()?.get()?.last_used.into();
+                let last_used: DateTime<Local> = entry.get_rankings_node()?.get()?.last_used.into_datetime_local()?;
                 let entry = entry.get()?;
 
                 Ok::<CacheEntry, CCPError>(CacheEntry {
