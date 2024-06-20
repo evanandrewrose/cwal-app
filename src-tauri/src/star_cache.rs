@@ -110,9 +110,7 @@ impl StarCache {
 
                     for entry in entries {
                         if entry.last_used > *last_entries_time {
-                            //println!("entry: {:?}", &entry);
                             new_entries.push(entry.url);
-
                             newest_entry_time = Some(entry.last_used);
                         }
                     }
