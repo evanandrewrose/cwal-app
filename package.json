@@ -12,7 +12,7 @@
 		"format": "prettier --write ."
 	},
 	"dependencies": {
-		"bw-web-api": "^3.0.1",
+		"bw-web-api": "^3.0.2",
 		"@tauri-apps/api": "^1.5.6"
 	},
 	"devDependencies": {
