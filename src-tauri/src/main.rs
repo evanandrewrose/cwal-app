@@ -2,19 +2,24 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod scr_events;
+mod scr_process;
 mod star_cache;
+
+use std::sync::{Arc, Mutex};
 
 use tauri::Window;
 
-use crate::scr_events::ScrEventsReceiver;
+use crate::scr_events::AggregateScrEventsProvider;
 
 // init a background process on the command, and emit periodic events only to the window that used the command
 #[tauri::command]
 fn init_process(window: Window) {
     std::thread::spawn(move || {
-        let mut _listen = ScrEventsReceiver::listen(|entry| {
-            window.emit("scr-event", entry).unwrap();
-        });
+        let window = Mutex::new(Arc::new(window));
+        let mut _listen = AggregateScrEventsProvider::new(Arc::new(Mutex::new(move |event| {
+            let window = window.lock().unwrap();
+            window.emit("scr-event", event).unwrap();
+        })));
     });
 }
 

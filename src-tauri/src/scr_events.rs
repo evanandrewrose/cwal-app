@@ -1,9 +1,15 @@
-use std::{collections::VecDeque, sync::Mutex};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
 
 use serde::Serialize;
 use url::Url;
 
-use crate::star_cache::StarCache;
+use crate::{
+    scr_process::{find_starcraft_api_port, find_starcraft_process},
+    star_cache::StarCache,
+};
 
 static MAXIMUM_HELD_ENTRIES: usize = 30;
 
@@ -89,18 +95,30 @@ impl From<String> for ScrNetworkRequest {
     }
 }
 
-/// Watched for SCR-related cache events.
-pub struct ScrNetworkRequestEventReceiver {
-    _star_cache: StarCache,
+pub struct ScrProcessEventProvider {
+    _thread: std::thread::JoinHandle<()>,
 }
 
-impl ScrNetworkRequestEventReceiver {
-    /// Creates a new `ScrCacheNotifier` instance.
-    pub fn new(event_handler: Mutex<Box<dyn FnMut(ScrNetworkRequest) + Send>>) -> Self {
-        let star_cache = StarCache::new(Mutex::new(Box::new(move |entry| {
-            event_handler.lock().unwrap()(ScrNetworkRequest::from(entry));
-        })));
-        ScrNetworkRequestEventReceiver { _star_cache: star_cache }
+impl ScrProcessEventProvider {
+    fn new(event_handler: Arc<Mutex<dyn FnMut(ScrEvent) + Send>>) -> ScrProcessEventProvider {
+        ScrProcessEventProvider {
+            _thread: std::thread::spawn(move || loop {
+                let mut system = sysinfo::System::new();
+                system.refresh_all();
+
+                std::thread::sleep(std::time::Duration::from_secs(1));
+
+                let pid = find_starcraft_process(&mut system);
+
+                if let Some(pid) = pid {
+                    if let Some(port) = find_starcraft_api_port(&pid) {
+                        return event_handler.lock().unwrap()(ScrEvent::WebServerRunning { port: port });
+                    }
+                }
+
+                event_handler.lock().unwrap()(ScrEvent::WebServerDown)
+            }),
+        }
     }
 }
 
@@ -111,7 +129,7 @@ pub struct Player {
     gateway: u8,
 }
 
-/// Responsible for receiving events from the cache and deriving an "SCR" event from them.
+/// SCR events from multiple sources.
 #[derive(Debug, Serialize, Clone)]
 pub enum ScrEvent {
     // tooninfo -> leaderboardbytoon -> chatpanel
@@ -125,100 +143,135 @@ pub enum ScrEvent {
         map: String,
     },
     GameEnded,
+    WebServerRunning {
+        port: u16,
+    },
+    WebServerDown
 }
 
-pub struct ScrEventsReceiver {
-    _recv: ScrNetworkRequestEventReceiver,
+/// Watches the SCR network cache and invokes the provided callback to notify
+/// when those events have indicated an SCR event. For example, the cache might indicate
+/// url fetches for two player profiles and a map preview, which would be used to
+/// derive a `MatchFound` event.
+pub struct ScrNetworkEventsReceiver {
+    _thread: std::thread::JoinHandle<()>,
 }
 
-// Receives scr logical events (e.g., a profile was selected or a game was initiated, etc.). It
-// does this by listening to network requests and constructing an event from them.
-impl ScrEventsReceiver {
-    pub fn listen<F: FnMut(ScrEvent) -> ()>(mut event_handler: F) -> () {
-        let mut events = VecDeque::new();
+impl ScrNetworkEventsReceiver {
+    fn new(event_handler: Arc<Mutex<dyn FnMut(ScrEvent) + Send>>) -> Self {
+        let thread = std::thread::spawn(move || {
+            let mut events = VecDeque::new();
 
-        let (tx, rx) = std::sync::mpsc::channel::<ScrNetworkRequest>();
+            let _network_requests_receiver = StarCache::new(Mutex::new(Box::new(move |entry| {
+                let request = ScrNetworkRequest::from(entry);
 
-        let _network_request_receiver =
-            ScrNetworkRequestEventReceiver::new(Mutex::new(Box::new(move |entry| {
-                let _ = tx.send(entry);
-            })));
+                let mut derived_event = None;
 
-        for received in rx {
-            //println!("Received a network request event: {:?}", received);
-            let mut derived_event = None;
+                match request {
+                    ScrNetworkRequest::GameLoadingProfile { ref alias, gateway } => {
+                        let map = events.iter().rev().take(30).find(|event| match event {
+                            ScrNetworkRequest::MapPreview { .. } => true,
+                            _ => false,
+                        });
 
-            match received {
-                ScrNetworkRequest::GameLoadingProfile { ref alias, gateway } => {
-                    let map = events.iter().rev().take(30).find(|event| match event {
-                        ScrNetworkRequest::MapPreview { .. } => true,
-                        _ => false,
-                    });
+                        let other_player = events.iter().rev().take(30).find(|event| match event {
+                            ScrNetworkRequest::GameLoadingProfile {
+                                alias: other_alias,
+                                gateway: other_gateway,
+                            } => other_alias != alias || other_gateway != &gateway,
+                            _ => false,
+                        });
 
-                    let other_player = events.iter().rev().take(30).find(|event| match event {
-                        ScrNetworkRequest::GameLoadingProfile { alias: other_alias, gateway: other_gateway } => {
-                            other_alias != alias || other_gateway != &gateway
-                        },
-                        _ => false,
-                    });
-
-                    if let Some(ScrNetworkRequest::MapPreview { hash }) = map {
-                        if let Some(ScrNetworkRequest::GameLoadingProfile {
-                            alias: other_alias,
-                            gateway: other_gateway,
-                        }) = other_player
-                        {
-                            derived_event = Some(ScrEvent::MatchFound {
-                                player1: Player {
-                                    alias: alias.clone(),
-                                    gateway: gateway,
-                                },
-                                player2: Player {
-                                    alias: other_alias.clone(),
-                                    gateway: *other_gateway,
-                                },
-                                map: hash.clone(),
-                            });
-                        }
-                    }
-                }
-                ScrNetworkRequest::ChatPanel { .. } => {
-                    // try to find the most recent preceding leaderboard event by toon event, it should
-                    // be in the most recent 5 or so events
-                    let leaderboard_event = events.iter().rev().take(5).find(|event| match event {
-                        ScrNetworkRequest::LeaderboardByToon { .. } => true,
-                        _ => false,
-                    });
-
-                    // if we found a leaderboard event, we can derive a profile select event
-                    if let Some(leaderboard_event) = leaderboard_event {
-                        match leaderboard_event {
-                            ScrNetworkRequest::LeaderboardByToon { alias, gateway } => {
-                                derived_event = Some(ScrEvent::ProfileSelect {
-                                    alias: alias.clone(),
-                                    gateway: *gateway,
+                        if let Some(ScrNetworkRequest::MapPreview { hash }) = map {
+                            if let Some(ScrNetworkRequest::GameLoadingProfile {
+                                alias: other_alias,
+                                gateway: other_gateway,
+                            }) = other_player
+                            {
+                                derived_event = Some(ScrEvent::MatchFound {
+                                    player1: Player {
+                                        alias: alias.clone(),
+                                        gateway: gateway,
+                                    },
+                                    player2: Player {
+                                        alias: other_alias.clone(),
+                                        gateway: *other_gateway,
+                                    },
+                                    map: hash.clone(),
                                 });
                             }
-                            _ => {}
                         }
                     }
+                    ScrNetworkRequest::ChatPanel { .. } => {
+                        // try to find the most recent preceding leaderboard event by toon event, it should
+                        // be in the most recent 5 or so events
+                        let leaderboard_event =
+                            events.iter().rev().take(5).find(|event| match event {
+                                ScrNetworkRequest::LeaderboardByToon { .. } => true,
+                                _ => false,
+                            });
+
+                        // if we found a leaderboard event, we can derive a profile select event
+                        if let Some(leaderboard_event) = leaderboard_event {
+                            match leaderboard_event {
+                                ScrNetworkRequest::LeaderboardByToon { alias, gateway } => {
+                                    derived_event = Some(ScrEvent::ProfileSelect {
+                                        alias: alias.clone(),
+                                        gateway: *gateway,
+                                    });
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    ScrNetworkRequest::ToastPanel { .. } => {
+                        derived_event = Some(ScrEvent::GameEnded);
+                    }
+                    _ => {}
                 }
-                ScrNetworkRequest::ToastPanel { .. } => {
-                    derived_event = Some(ScrEvent::GameEnded);
+
+                if let Some(received) = derived_event {
+                    event_handler.lock().unwrap()(received);
+                    events.clear();
                 }
-                _ => {}
-            }
 
-            if let Some(received) = derived_event {
-                event_handler(received);
-                events.clear();
-            }
+                events.push_back(request);
 
-            events.push_back(received);
+                if events.len() > MAXIMUM_HELD_ENTRIES {
+                    events.pop_front();
+                }
+            })));
+        });
 
-            if events.len() > MAXIMUM_HELD_ENTRIES {
-                events.pop_front();
-            }
+        ScrNetworkEventsReceiver { _thread: thread }
+    }
+}
+
+/// A provider of SCR events, which can be either from a process or network source.
+#[allow(dead_code)] // just used to aggregate
+enum ScrEventProvider {
+    ScrProcessEventProvider(ScrProcessEventProvider),
+    ScrNetworkEventsReceiver(ScrNetworkEventsReceiver),
+}
+
+/// An aggregate provider of SCR events, which can be used to listen to multiple sources of
+/// SCR events.
+pub struct AggregateScrEventsProvider {
+    _providers: Vec<ScrEventProvider>,
+}
+
+impl AggregateScrEventsProvider {
+    pub fn new(
+        event_handler: Arc<Mutex<dyn FnMut(ScrEvent) + Send>>,
+    ) -> AggregateScrEventsProvider {
+        let process_provider = ScrProcessEventProvider::new(event_handler.clone());
+        let network_provider = ScrNetworkEventsReceiver::new(event_handler.clone());
+
+        AggregateScrEventsProvider {
+            _providers: vec![
+                ScrEventProvider::ScrProcessEventProvider(process_provider),
+                ScrEventProvider::ScrNetworkEventsReceiver(network_provider),
+            ],
         }
     }
 }
