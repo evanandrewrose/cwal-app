@@ -3,8 +3,8 @@
 	import Menu from '$lib/components/menu.svelte';
 	import { configureReceiveTauriEvents } from '$lib/scrState.svelte';
 
-	$effect.pre(async () => {
-		await configureReceiveTauriEvents();
+	$effect.pre(() => {
+		configureReceiveTauriEvents();
 	})
 </script>
 

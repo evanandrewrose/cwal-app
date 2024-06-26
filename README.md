@@ -1,9 +1,24 @@
 To run in development mode (reloading when code changes):
 
+# Dependencies:
+
+## NPM & NodeJS
+* https://nodejs.org/en/download/package-manager
+
+## Rust
+* https://rustup.rs/
+
+## Tauri
+```
+cargo add tauri-cli
+```
+
+# Running it
 ```
 $env:RUST_BACKTRACE=1; cargo tauri dev
 ```
 
+# Releasing
 To release:
 
 ```

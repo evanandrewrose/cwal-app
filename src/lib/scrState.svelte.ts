@@ -25,24 +25,39 @@ export const scrState: ScrState = $state({
     map: null
 })
 
+// This function is used to convert the Rust event to a TypeScript event. The events are modeled
+// in rust as an enum with a payload but idiomatic TypeScript would use a union type.
+// For example, the Rust events:
+//
+// Event {
+//     WebServerDown,
+//     WebServerRunning { port: u16 },
+// }
+//
+// should tranform into:
+//
+// type ScrEvent = {
+//     name: 'WebServerDown',
+// } | {
+//     name: 'WebServerRunning',
+//     payload: { port: number }
+// }
+const convertRustEvent = (ev: Event<object>): ScrEvent => {
+    const name = typeof ev.payload === 'string' ? ev.payload : Object.keys(ev.payload)[0];
+    const payload = typeof ev.payload === 'string' ? null : Object.values(ev.payload)[0]
+
+    return {
+        name,
+        payload,
+    } as ScrEvent;
+}
+
 export const configureReceiveTauriEvents = async () => {
+    // Inform the rust backend to start generating events.
     await invoke('init_process');
 
     await listen('scr-event', (ev: Event<object>) => {
-        console.log(ev);
-        // get only key on the paylaod
-        const eventName = typeof ev.payload === 'string' ? ev.payload : Object.keys(ev.payload)[0];
-
-        // convert from rust serialized event to typescript union type
-        const event = {
-            name: eventName,
-            payload: typeof ev.payload === 'string' ? null : ev.payload
-        } as ScrEvent;
-
-        if ('WebServerRunning' !== event.name) {
-            // (too noisy otherwise)
-            console.log(event);
-        }
+        const event = convertRustEvent(ev);
 
         if ('WebServerDown' === event.name) {
             scrState.port = null;
@@ -65,7 +80,9 @@ export const configureReceiveTauriEvents = async () => {
         } else if ('WebServerRunning' === event.name) {
             scrState.port = event.payload.port;
             scrState.gameRunning = true;
+        } else if ('GameEnded' === event.name) {
+            scrState.opponent = null;
+            scrState.map = null;
         }
     });
-    console.log('listener done');
 };

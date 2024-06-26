@@ -5,15 +5,24 @@ mod scr_events;
 mod scr_process;
 mod star_cache;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 
 use tauri::Window;
 
 use crate::scr_events::AggregateScrEventsProvider;
 
-// init a background process on the command, and emit periodic events only to the window that used the command
+// Esnure that the background process is only initialized once.
+static INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+// Initialize the background processes that notify the frontend about SC:R events.
 #[tauri::command]
 fn init_process(window: Window) {
+    if INITIALIZED.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+
+    INITIALIZED.store(true, std::sync::atomic::Ordering::Relaxed);
+
     std::thread::spawn(move || {
         let window = Mutex::new(Arc::new(window));
         let mut _listen = AggregateScrEventsProvider::new(Arc::new(Mutex::new(move |event| {
