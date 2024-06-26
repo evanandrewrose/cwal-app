@@ -8,10 +8,6 @@
 	let unlisten: () => void;
 	let port: number | null = $state(null);
 
-	type TauriEvent<T> = {
-		payload: T;
-	};
-
 	(async () => {
 		unlisten = await listen('scr-event', (event: TauriEvent<ScrEvent>) => {
 			if ('ProfileSelect' in event.payload) {
@@ -66,8 +62,6 @@
 
 	let searchValue = $state('');
 	let searchResults: Awaited<ReturnType<SCApi['leaderboardNameSearch']>> = $state([]);
-
-	invoke('init_process');
 </script>
 
 <svelte:head>

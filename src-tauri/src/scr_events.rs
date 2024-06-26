@@ -133,7 +133,6 @@ pub struct Player {
 /// SCR events from multiple sources.
 #[derive(Debug, Serialize, Clone)]
 pub enum ScrEvent {
-    // tooninfo -> leaderboardbytoon -> chatpanel
     ProfileSelect {
         alias: String,
         gateway: u8,
@@ -147,7 +146,7 @@ pub enum ScrEvent {
     WebServerRunning {
         port: u16,
     },
-    WebServerDown
+    WebServerDown,
 }
 
 /// Watches the SCR network cache and invokes the provided callback to notify
@@ -162,10 +161,14 @@ impl ScrNetworkEventsReceiver {
     fn new(event_handler: Arc<Mutex<dyn FnMut(ScrEvent) + Send>>) -> Self {
         let thread = std::thread::spawn(move || {
             let mut events = VecDeque::new();
+            let (tx, rx) = std::sync::mpsc::channel();
 
             let _network_requests_receiver = StarCache::new(Mutex::new(Box::new(move |entry| {
                 let request = ScrNetworkRequest::from(entry);
+                tx.send(request).unwrap();
+            })));
 
+            for request in rx.iter() {
                 let mut derived_event = None;
 
                 match request {
@@ -232,6 +235,7 @@ impl ScrNetworkEventsReceiver {
                 }
 
                 if let Some(received) = derived_event {
+                    println!("{:?}", received);
                     event_handler.lock().unwrap()(received);
                     events.clear();
                 }
@@ -241,7 +245,7 @@ impl ScrNetworkEventsReceiver {
                 if events.len() > MAXIMUM_HELD_ENTRIES {
                     events.pop_front();
                 }
-            })));
+            }
         });
 
         ScrNetworkEventsReceiver { _thread: thread }

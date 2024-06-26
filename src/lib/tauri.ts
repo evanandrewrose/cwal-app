@@ -5,19 +5,22 @@ export interface Player {
 }
 
 export type ScrEvent = {
-    ProfileSelect: Player;
+    name: 'ProfileSelect';
+    payload: Player;
 } | {
-    MatchFound: {
+    name: 'MatchFound';
+    payload: {
         player1: Player;
         player2: Player;
         map: string;
     };
 } | {
-    GameEnded: null;
+    name: 'GameEnded';
 } | {
-    WebServerRunning: {
+    name: 'WebServerRunning';
+    payload: {
         port: number;
     };
 } | {
-    WebServerDown: null;
-};
+    name: 'WebServerDown';
+}

@@ -17,6 +17,7 @@ fn init_process(window: Window) {
     std::thread::spawn(move || {
         let window = Mutex::new(Arc::new(window));
         let mut _listen = AggregateScrEventsProvider::new(Arc::new(Mutex::new(move |event| {
+            println!("event: {:?}", event);
             let window = window.lock().unwrap();
             window.emit("scr-event", event).unwrap();
         })));
