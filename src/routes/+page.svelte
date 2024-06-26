@@ -10,7 +10,7 @@
 
 	type TauriEvent<T> = {
 		payload: T;
-	}
+	};
 
 	(async () => {
 		unlisten = await listen('scr-event', (event: TauriEvent<ScrEvent>) => {
@@ -76,7 +76,13 @@
 </svelte:head>
 
 <div class="dropdown">
-	<input type="text" class="grow" placeholder="Search" bind:value={searchValue} oninput={() => playerSearch(searchValue)} />
+	<input
+		type="text"
+		class="grow"
+		placeholder="Search"
+		bind:value={searchValue}
+		oninput={() => playerSearch(searchValue)}
+	/>
 	<ul class="menu dropdown-content bg-base-100 rounded-box z-[1] w-52 p-2 shadow">
 		{#each searchResults as searchResult}
 			<li>{searchResult.name}</li>
