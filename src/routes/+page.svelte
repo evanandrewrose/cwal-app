@@ -60,7 +60,7 @@
 	let player2Alias: string | null = $state(null);
 	let player2Gateway: number | null = $state(null);
 
-	let map = $state(null);
+	let map: string | null = $state(null);
 
 	let scapi = $derived(scapiFromPort(port));
 
