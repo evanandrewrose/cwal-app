@@ -1,5 +1,5 @@
-import { BroodWarConnection, SCApi, type BroodWarApiPath, type IBroodWarConnection } from 'bw-web-api';
-import { getScrState } from './scrState.svelte';
+import { SCApi, type BroodWarApiPath, type IBroodWarConnection } from 'bw-web-api';
+import { getScrState } from '@/lib/scrState.svelte';
 import { GravaticBooster, SCApiWithCaching } from 'gravatic-booster';
 import {
     fetch as tauriFetch
@@ -18,6 +18,7 @@ export class TauriConnection implements IBroodWarConnection {
         for (let i = 0; i < max_attempts; i++) {
             await sleep(timeout * i);
             try {
+                console.log(`Request: ${this.server}/${path}`);
                 response = await tauriFetch(`${this.server}/${path}`, {
                     headers: {
                         Accept: "application/json",

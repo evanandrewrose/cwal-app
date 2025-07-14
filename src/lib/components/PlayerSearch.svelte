@@ -1,0 +1,105 @@
+<script lang="ts">
+  import "@/app.css";
+
+  import { onMount } from "svelte";
+  import { goto, onNavigate } from "$app/navigation";
+  import { getGb } from "@/lib/scApi.svelte";
+  import { debounce } from "@/lib/utils";
+
+  import * as Command from "@/lib/components/ui/command";
+  import * as Avatar from "@/lib/components/ui/avatar";
+
+  import type { GravaticBooster, PlayerSearchResult } from "gravatic-booster";
+
+  let searching: boolean = $state(false);
+  let gb: Promise<GravaticBooster> = getGb();
+
+  const resetSearching = () => {
+    searching = false;
+  };
+
+  onMount(resetSearching);
+  onNavigate(resetSearching);
+
+  let searchResults: PlayerSearchResult[] = $state([]);
+  let searchValue: string = $state("");
+
+  const playerSearch = async (searchValue: string) => {
+    try {
+      const _gb = await gb;
+      if (!searchValue) {
+        return;
+      }
+      searching = true;
+      searchResults = await _gb.playerSearch(searchValue);
+    } catch (e) {
+      searchResults = [];
+      console.error(e);
+    } finally {
+      searching = false;
+    }
+  };
+
+  const playerSearchDebounced = debounce(playerSearch, 500);
+
+  const handlePlayerSelect = (name: string, gateway: string) => {
+    goto(`/player/${name}/${encodeURIComponent(gateway)}`);
+  };
+
+  $effect(() => {
+    playerSearchDebounced(searchValue);
+  });
+</script>
+
+<svelte:head>
+  <title>Home</title>
+  <meta name="description" content="Svelte demo app" />
+</svelte:head>
+
+<Command.Root
+  class="rounded-lg border shadow-md md:min-w-[450px]"
+  shouldFilter={!searching}
+>
+  <Command.Input placeholder="Player Search" bind:value={searchValue} />
+  <Command.List>
+    {#if searching}
+      <Command.Group>
+        <Command.Item>Loading</Command.Item>
+      </Command.Group>
+    {:else}
+      {#key JSON.stringify(searchResults)}
+        <Command.Group>
+          {#each searchResults as searchResult}
+            <Command.Item
+              class="cursor-pointer"
+              value="{searchResult.name}@{searchResult.gatewayId}"
+              onSelect={() => {
+                console.log("Item selected:", searchResult);
+                handlePlayerSelect(
+                  searchResult.name,
+                  `${searchResult.gatewayId}`
+                );
+              }}
+            >
+              <div class="flex flex-row justify-between w-full">
+                <div class="flex flex-col gap-1">
+                  <medium class="font-medium leading-none">
+                    {searchResult.name}
+                  </medium>
+                  <small class="text-sm leading-none"
+                    >{searchResult.battletag}</small
+                  >
+                </div>
+                {#if searchResult.avatar}
+                  <Avatar.Root>
+                    <Avatar.Image src={searchResult.avatar} />
+                  </Avatar.Root>
+                {/if}
+              </div>
+            </Command.Item>
+          {/each}
+        </Command.Group>
+      {/key}
+    {/if}
+  </Command.List>
+</Command.Root>

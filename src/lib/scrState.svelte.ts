@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event"
 import type { Event } from "@tauri-apps/api/event"
-import type { ScrEvent } from "./tauri"
+import type { ScrEvent } from "@/lib/tauri"
 import { invoke } from "@tauri-apps/api/core"
 
 export enum GameServerState {
