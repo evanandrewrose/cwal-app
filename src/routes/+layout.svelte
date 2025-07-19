@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { configureReceiveTauriEvents } from "@/lib/scrState.svelte";
   import { ModeWatcher } from "mode-watcher";
-  import * as Sidebar from "@/lib/components/ui/sidebar";
+
+  import TitleBar from "@/lib/components/TitleBar.svelte";
   import AppSidebar from "@/lib/components/app-sidebar.svelte";
+  import * as Sidebar from "@/lib/components/ui/sidebar";
+  import { configureReceiveTauriEvents } from "@/lib/scrState.svelte";
 
   let { children } = $props();
 
@@ -21,9 +23,14 @@
   <meta name="description" content="CWAL Desktop App" />
 </svelte:head>
 
-<Sidebar.Provider>
-  <AppSidebar />
-  <main class="w-full">
-    {@render children?.()}
-  </main>
-</Sidebar.Provider>
+<div class="flex flex-col-reverse w-full h-[100vh] overflow-hidden">
+  <div class="flex min-h-0">
+    <Sidebar.Provider>
+      <AppSidebar />
+      <main class="w-full">
+        {@render children?.()}
+      </main>
+    </Sidebar.Provider>
+  </div>
+  <TitleBar />
+</div>

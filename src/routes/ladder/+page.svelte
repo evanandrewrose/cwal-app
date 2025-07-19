@@ -1,17 +1,19 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+
+  import type { Ranking } from "gravatic-booster";
+
   import PlayerSearch from "@/lib/components/PlayerSearch.svelte";
   import * as Table from "@/lib/components/ui/table";
   import { getGb } from "@/lib/scApi.svelte";
   import { avatarOrDefault, debounce } from "@/lib/utils";
-  import type { Ranking } from "gravatic-booster";
-  import { onMount, type SvelteComponent } from "svelte";
 
   const gb = getGb();
 
   const LOAD_MORE_DELTA = 100;
 
   let rankings: Array<Ranking> = $state([]);
-  let fetching = $state(false);
+  let fetching = $state(false); // todo reflect state in ui
   let rankingsGenerator: AsyncGenerator<Ranking, void, unknown> | null = null;
   let scrollableDiv: HTMLDivElement;
 
@@ -56,7 +58,7 @@
 </svelte:head>
 
 <div
-  class="block p-2 w-full h-[100vh] overflow-y-scroll scroll-smooth unanchored"
+  class="p-2 w-full h-full overflow-y-scroll unanchored"
   onscroll={onScroll}
   bind:this={scrollableDiv}
 >

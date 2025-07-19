@@ -1,12 +1,13 @@
 <script lang="ts">
   import "@/app.css";
 
-  import { getGb } from "@/lib/scApi.svelte";
   import { onMount } from "svelte";
 
-  import type { GravaticBooster, PlayerSearchResult } from "gravatic-booster";
+  import type { GravaticBooster } from "gravatic-booster";
+
   import * as Select from "@/lib/components/ui/select";
-  import * as Table from "$lib/components/ui/table";
+  import * as Table from "@/lib/components/ui/table";
+  import { getGb } from "@/lib/scApi.svelte";
 
   let gb: Promise<GravaticBooster> = getGb();
 

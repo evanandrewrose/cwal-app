@@ -1,3 +1,10 @@
 {
   "svelte.enable-ts-plugin": true,
+  "vite.autoStart": false,
+  "terminal.integrated.profiles.windows": {
+    "zsh": {
+      "path": "bash",
+      "args": ["-c", "zsh"]
+    }
+  }
 }

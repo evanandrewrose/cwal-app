@@ -1,8 +1,9 @@
 <script lang="ts">
   import MapIcon from "@lucide/svelte/icons/map";
+  import SettingsIcon from "@lucide/svelte/icons/settings";
   import LadderIcon from "@lucide/svelte/icons/waves-ladder";
-  import * as Sidebar from "$lib/components/ui/sidebar/index.js";
- 
+  import * as Sidebar from "@/lib/components/ui/sidebar";
+
   const items = [
     {
       title: "Ladder",
@@ -14,13 +15,17 @@
       url: "/maps",
       icon: MapIcon,
     },
+    {
+      title: "Settings",
+      url: "/settings",
+      icon: SettingsIcon,
+    },
   ];
 </script>
 
 <Sidebar.Root>
   <Sidebar.Content>
     <Sidebar.Group>
-      <Sidebar.GroupLabel>Application</Sidebar.GroupLabel>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
           {#each items as item (item.title)}
