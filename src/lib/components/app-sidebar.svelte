@@ -4,6 +4,7 @@
   import LadderIcon from "@lucide/svelte/icons/waves-ladder";
 
   import * as Sidebar from "@/lib/components/ui/sidebar";
+  import StarCraftStatus from "@/lib/components/StarCraftStatus.svelte";
 
   const items = [
     {
@@ -25,29 +26,28 @@
 </script>
 
 <Sidebar.Root>
-  <div class="flex flex-col" style="height: 100%;">
-    <div class="flex-1">
-      <Sidebar.Group>
-        <Sidebar.GroupContent>
-          <Sidebar.Menu>
-            {#each items as item (item.title)}
-              <Sidebar.MenuItem>
-                <Sidebar.MenuButton>
-                  {#snippet child({ props })}
-                    <a href={item.url} {...props}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </a>
-                  {/snippet}
-                </Sidebar.MenuButton>
-              </Sidebar.MenuItem>
-            {/each}
-          </Sidebar.Menu>
-        </Sidebar.GroupContent>
-      </Sidebar.Group>
-    </div>
-    <div class="flex-shrink-0 p-3 bg-blue-500 text-white rounded m-2">
-      <p class="text-sm font-bold">Test content</p>
-    </div>
-  </div>
+  <Sidebar.Content>
+    <Sidebar.Group>
+      <Sidebar.GroupContent>
+        <Sidebar.Menu>
+          {#each items as item}
+            <Sidebar.MenuItem>
+              <Sidebar.MenuButton>
+                {#snippet child({ props })}
+                  <a href={item.url} {...props}>
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </a>
+                {/snippet}
+              </Sidebar.MenuButton>
+            </Sidebar.MenuItem>
+          {/each}
+        </Sidebar.Menu>
+      </Sidebar.GroupContent>
+    </Sidebar.Group>
+  </Sidebar.Content>
+
+  <Sidebar.Footer>
+    <StarCraftStatus />
+  </Sidebar.Footer>
 </Sidebar.Root>
