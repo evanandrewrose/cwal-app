@@ -4,6 +4,8 @@
   import type { Ranking } from "gravatic-booster";
 
   import PlayerSearch from "@/lib/components/PlayerSearch.svelte";
+  import Race from "@/lib/components/icons/race.svelte";
+  import Rank from "@/lib/components/icons/rank.svelte";
   import * as Table from "@/lib/components/ui/table";
   import { getGb } from "@/lib/scApi.svelte";
   import { avatarOrDefault, debounce } from "@/lib/utils";
@@ -67,13 +69,13 @@
     <Table.Caption>StarCraft: Remastered Ladder</Table.Caption>
     <Table.Header>
       <Table.Row>
-        <Table.Head class="w-[100px]">Rank</Table.Head>
+        <Table.Head></Table.Head>
         <Table.Head>Player</Table.Head>
         <Table.Head>MMR</Table.Head>
+        <Table.Head>Rank</Table.Head>
         <Table.Head>Wins</Table.Head>
         <Table.Head>Losses</Table.Head>
         <Table.Head>Disconnects</Table.Head>
-        <Table.Head>Race</Table.Head>
       </Table.Row>
     </Table.Header>
     <Table.Body>
@@ -93,16 +95,18 @@
                 />
                 <div>
                   <div class="font-bold">{ranking.toon}</div>
-                  <div class="text-sm opacity-50">{ranking.gateway.name}</div>
+                  <Race race={ranking.featureRace} />
                 </div>
               </div>
             </a>
           </Table.Cell>
-          <Table.Cell>{ranking.rating} {ranking.tier}</Table.Cell>
+          <Table.Cell>{ranking.rating}</Table.Cell>
+          <Table.Cell>
+            <Rank rank={ranking.tier} />
+          </Table.Cell>
           <Table.Cell>{ranking.wins}</Table.Cell>
           <Table.Cell>{ranking.losses}</Table.Cell>
           <Table.Cell>{ranking.disconnects}</Table.Cell>
-          <Table.Cell>{ranking.featureRace}</Table.Cell>
         </Table.Row>
       {/each}
     </Table.Body>

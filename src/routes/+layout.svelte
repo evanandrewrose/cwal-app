@@ -23,14 +23,14 @@
   <meta name="description" content="CWAL Desktop App" />
 </svelte:head>
 
-<div class="flex flex-col-reverse w-full h-[100vh] overflow-hidden">
-  <div class="flex min-h-0">
-    <Sidebar.Provider>
+<div class="flex flex-col w-full h-[100vh] overflow-hidden">
+  <TitleBar />
+  <div class="flex flex-1 min-h-0">
+    <Sidebar.Provider class="!min-h-0 h-full">
       <AppSidebar />
       <main class="w-full">
         {@render children?.()}
       </main>
     </Sidebar.Provider>
   </div>
-  <TitleBar />
 </div>
