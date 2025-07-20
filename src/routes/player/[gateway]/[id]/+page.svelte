@@ -2,13 +2,14 @@
   import { afterNavigate } from "$app/navigation";
   import type { GravaticBooster, Match, Ranking } from "gravatic-booster";
 
-  import * as Avatar from "@/lib/components/ui/avatar";
-  import * as Card from "@/lib/components/ui/card";
-  import * as Table from "@/lib/components/ui/table";
-  import { Skeleton } from "@/lib/components/ui/skeleton";
+  import MapName from "@/lib/components/MapName.svelte";
   import Race from "@/lib/components/icons/race.svelte";
   import Rank from "@/lib/components/icons/rank.svelte";
-  import MapName from "@/lib/components/MapName.svelte";
+  import * as Avatar from "@/lib/components/ui/avatar";
+  import * as Card from "@/lib/components/ui/card";
+  import { Skeleton } from "@/lib/components/ui/skeleton";
+  import * as Table from "@/lib/components/ui/table";
+  import * as Tooltip from "@/lib/components/ui/tooltip";
   import { getGb } from "@/lib/scApi.svelte";
   import { avatarOrDefault } from "@/lib/utils";
 
@@ -35,26 +36,35 @@
   let scrollableDiv: HTMLDivElement | null = $state(null);
 
   const getMatchResult = (player: any) => {
-    if (player?.profileInfo?.points?.delta !== undefined && player.profileInfo.points.delta !== 0) {
-      return player.profileInfo.points.delta > 0 ? 'win' : 'loss';
+    if (
+      player?.profileInfo?.points?.delta !== undefined &&
+      player.profileInfo.points.delta !== 0
+    ) {
+      return player.profileInfo.points.delta > 0 ? "win" : "loss";
     }
-    return player?.result || 'unknown';
+    return player?.result || "unknown";
   };
 
   const getResultDisplay = (result: string) => {
     switch (result) {
-      case 'win': return 'Win';
-      case 'loss': return 'Loss';
-      case 'draw': return 'Draw';
-      case 'undecided': return 'Undecided';
-      default: return 'Unknown';
+      case "win":
+        return "Win";
+      case "loss":
+        return "Loss";
+      case "draw":
+        return "Draw";
+      case "undecided":
+        return "Undecided";
+      default:
+        return "Unknown";
     }
   };
 
   const fetchMoreMatches = async () => {
     if (!matchesGenerator) {
-      return;
+      return false;
     }
+    let fetchedAny = false;
     for (let i = 0; i < MATCH_FETCH_NUM; ++i) {
       const next = await matchesGenerator.next();
       if (next.done) {
@@ -62,6 +72,32 @@
       }
 
       matches.push(next.value!);
+      fetchedAny = true;
+    }
+    return fetchedAny;
+  };
+
+  const hasScrollbar = () => {
+    if (!scrollableDiv) return false;
+    return scrollableDiv.scrollHeight > scrollableDiv.clientHeight;
+  };
+
+  const fetchUntilScrollbarOrEnd = async () => {
+    let shouldContinue = true;
+    while (shouldContinue) {
+      const fetchedMatches = await fetchMoreMatches();
+      if (!fetchedMatches) {
+        // No more matches available
+        break;
+      }
+
+      // Give DOM time to update
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      if (hasScrollbar()) {
+        // We now have enough content to scroll
+        break;
+      }
     }
   };
 
@@ -89,7 +125,7 @@
     });
     ranking = (await profile.requestedProfile?.ranking(leaderboard.id)) ?? null;
     matchesGenerator = (await profile.requestedProfile?.ladderGames()) ?? null;
-    await fetchMoreMatches();
+    await fetchUntilScrollbarOrEnd();
   });
 </script>
 
@@ -110,7 +146,9 @@
         <div class="flex items-center gap-4">
           <Avatar.Root class="w-14 h-14">
             <Avatar.Image src={avatar} alt="Player Avatar" />
-            <Avatar.Fallback class="text-base font-bold">{id.slice(0, 2).toUpperCase()}</Avatar.Fallback>
+            <Avatar.Fallback class="text-base font-bold"
+              >{id.slice(0, 2).toUpperCase()}</Avatar.Fallback
+            >
           </Avatar.Root>
           <div class="flex-1">
             <div class="flex items-center gap-2 mb-1">
@@ -134,27 +172,32 @@
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
             <div class="space-y-1">
               <div class="flex items-center justify-center gap-2">
-                <span class="text-lg font-bold">#{ranking.rank || 'Unranked'}</span>
+                <span class="text-lg font-bold"
+                  >#{ranking.rank || "Unranked"}</span
+                >
                 {#if ranking.tier}
                   <Rank rank={ranking.tier} />
                 {/if}
               </div>
               <p class="text-xs text-muted-foreground">
-                {ranking.rating ? `${ranking.rating} Rating` : 'Current Ranking'}
+                {ranking.rating
+                  ? `${ranking.rating} Rating`
+                  : "Current Ranking"}
               </p>
             </div>
 
             <div class="space-y-1">
-              <div class="text-lg font-bold">{profile.requestedProfile?.numGamesLastWeek || 0}</div>
+              <div class="text-lg font-bold">
+                {profile.requestedProfile?.numGamesLastWeek || 0}
+              </div>
               <p class="text-xs text-muted-foreground">Games This Week</p>
             </div>
 
             <div class="space-y-1">
               <div class="text-lg font-bold">
-                {ranking?.wins && ranking?.losses 
+                {ranking?.wins && ranking?.losses
                   ? `${Math.round((ranking.wins / (ranking.wins + ranking.losses)) * 100)}%`
-                  : 'N/A'
-                }
+                  : "N/A"}
               </div>
               <p class="text-xs text-muted-foreground">
                 Win Rate ({ranking?.wins || 0}W/{ranking?.losses || 0}L)
@@ -194,108 +237,158 @@
           </Card.Description>
         </Card.Header>
         <Card.Content>
-          <Table.Root>
-            <Table.Header>
-              <Table.Row>
-                <Table.Head>Date</Table.Head>
-                <Table.Head>Map</Table.Head>
-                <Table.Head>Matchup</Table.Head>
-                <Table.Head>Opponent</Table.Head>
-                <Table.Head class="text-center">Result</Table.Head>
-                <Table.Head class="text-right">MMR</Table.Head>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {#if matches.length > 0}
-                {#each matches as match}
-                  <Table.Row class="hover:bg-muted/50">
-                    <Table.Cell class="font-medium">
-                      {match.timestamp?.toLocaleDateString() || 'Unknown'}
-                    </Table.Cell>
-                    <Table.Cell>
-                      <MapName name={match.map.displayName} />
-                    </Table.Cell>
-                    <Table.Cell>
-                      <div class="flex items-center gap-1 text-sm">
-                        {#if match.thisPlayer?.race}
-                          <Race race={match.thisPlayer.race} />
-                        {:else}
-                          <span class="text-muted-foreground">?</span>
-                        {/if}
-                        <span class="text-muted-foreground">vs</span>
-                        {#if match.opponent?.race}
-                          <Race race={match.opponent.race} />
-                        {:else}
-                          <span class="text-muted-foreground">?</span>
-                        {/if}
-                      </div>
-                    </Table.Cell>
-                    <Table.Cell>
-                      {#if match.opponent?.toon}
-                        <a
-                          href="/player/{match.opponent?.profileInfo?.gatewayId}/{match.opponent?.toon}"
-                          class="text-primary hover:underline"
-                        >
-                          {match.opponent.toon}
-                        </a>
-                      {:else}
-                        Unknown
-                      {/if}
-                    </Table.Cell>
-                    <Table.Cell class="text-center">
-                      {@const matchResult = getMatchResult(match.thisPlayer)}
-                      <span class="px-2 py-1 rounded-full text-xs font-medium {matchResult === 'win' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : matchResult === 'loss' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'}">
-                        {getResultDisplay(matchResult)}
-                      </span>
-                    </Table.Cell>
-                    <Table.Cell class="text-right">
-                      {#if match.thisPlayer?.profileInfo?.points?.delta !== undefined}
-                        <span class="text-sm font-medium {match.thisPlayer.profileInfo.points.delta > 0 ? 'text-green-600 dark:text-green-400' : match.thisPlayer.profileInfo.points.delta < 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}">
-                          {match.thisPlayer.profileInfo.points.delta > 0 ? '+' : ''}{match.thisPlayer.profileInfo.points.delta}
-                        </span>
-                      {:else}
-                        <span class="text-muted-foreground text-sm">—</span>
-                      {/if}
-                    </Table.Cell>
-                  </Table.Row>
-                {/each}
-              {:else if profile && ranking}
+          <Tooltip.Provider>
+            <Table.Root>
+              <Table.Header>
                 <Table.Row>
-                  <Table.Cell colspan={6} class="text-center py-8 text-muted-foreground">
-                    No matches found for this player
-                  </Table.Cell>
+                  <Table.Head>Date</Table.Head>
+                  <Table.Head>Map</Table.Head>
+                  <Table.Head>Matchup</Table.Head>
+                  <Table.Head>Opponent</Table.Head>
+                  <Table.Head class="text-center">Result</Table.Head>
+                  <Table.Head class="text-right">MMR</Table.Head>
                 </Table.Row>
-              {:else}
-                <!-- Skeleton Loading Rows -->
-                {#each Array(5) as _}
+              </Table.Header>
+              <Table.Body>
+                {#if matches.length > 0}
+                  {#each matches as match}
+                    <Table.Row class="hover:bg-muted/50">
+                      <Table.Cell class="font-medium">
+                        {#if match.timestamp}
+                          <Tooltip.Root>
+                            <Tooltip.Trigger
+                              class="cursor-help underline decoration-dotted decoration-muted-foreground/40 hover:decoration-muted-foreground/60"
+                            >
+                              {match.timestamp.toLocaleDateString()}
+                            </Tooltip.Trigger>
+                            <Tooltip.Content>
+                              <p class="text-sm">
+                                {match.timestamp.toLocaleString()}
+                              </p>
+                            </Tooltip.Content>
+                          </Tooltip.Root>
+                        {:else}
+                          <div class="flex items-center gap-2">
+                            <Tooltip.Root>
+                              <Tooltip.Trigger
+                                class="w-4 h-4 rounded-full border border-muted-foreground/50 text-muted-foreground/70 hover:text-muted-foreground hover:border-muted-foreground text-xs flex items-center justify-center cursor-help"
+                              >
+                                ?
+                              </Tooltip.Trigger>
+                              <Tooltip.Content>
+                                <p class="text-sm">
+                                  API returned corrupt timestamp for this match
+                                </p>
+                              </Tooltip.Content>
+                            </Tooltip.Root>
+                          </div>
+                        {/if}
+                      </Table.Cell>
+                      <Table.Cell>
+                        <MapName name={match.map.displayName} />
+                      </Table.Cell>
+                      <Table.Cell>
+                        <div class="flex items-center gap-1 text-sm">
+                          {#if match.thisPlayer?.race}
+                            <Race race={match.thisPlayer.race} />
+                          {:else}
+                            <span class="text-muted-foreground">?</span>
+                          {/if}
+                          <span class="text-muted-foreground">vs</span>
+                          {#if match.opponent?.race}
+                            <Race race={match.opponent.race} />
+                          {:else}
+                            <span class="text-muted-foreground">?</span>
+                          {/if}
+                        </div>
+                      </Table.Cell>
+                      <Table.Cell>
+                        {#if match.opponent?.toon}
+                          <a
+                            href="/player/{match.opponent?.profileInfo
+                              ?.gatewayId}/{match.opponent?.toon}"
+                            class="text-primary hover:underline"
+                          >
+                            {match.opponent.toon}
+                          </a>
+                        {:else}
+                          Unknown
+                        {/if}
+                      </Table.Cell>
+                      <Table.Cell class="text-center">
+                        {@const matchResult = getMatchResult(match.thisPlayer)}
+                        <span
+                          class="px-2 py-1 rounded-full text-xs font-medium {matchResult ===
+                          'win'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            : matchResult === 'loss'
+                              ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                              : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200'}"
+                        >
+                          {getResultDisplay(matchResult)}
+                        </span>
+                      </Table.Cell>
+                      <Table.Cell class="text-right">
+                        {#if match.thisPlayer?.profileInfo?.points?.delta !== undefined}
+                          <span
+                            class="text-sm font-medium {match.thisPlayer
+                              .profileInfo.points.delta > 0
+                              ? 'text-green-600 dark:text-green-400'
+                              : match.thisPlayer.profileInfo.points.delta < 0
+                                ? 'text-red-600 dark:text-red-400'
+                                : 'text-muted-foreground'}"
+                          >
+                            {match.thisPlayer.profileInfo.points.delta > 0
+                              ? "+"
+                              : ""}{match.thisPlayer.profileInfo.points.delta}
+                          </span>
+                        {:else}
+                          <span class="text-muted-foreground text-sm">—</span>
+                        {/if}
+                      </Table.Cell>
+                    </Table.Row>
+                  {/each}
+                {:else if profile && ranking}
                   <Table.Row>
-                    <Table.Cell>
-                      <Skeleton class="h-4 w-20" />
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Skeleton class="h-4 w-32" />
-                    </Table.Cell>
-                    <Table.Cell>
-                      <div class="flex items-center gap-1">
-                        <Skeleton class="h-4 w-12" />
-                        <Skeleton class="h-4 w-6" />
-                        <Skeleton class="h-4 w-12" />
-                      </div>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Skeleton class="h-4 w-24" />
-                    </Table.Cell>
-                    <Table.Cell class="text-center">
-                      <Skeleton class="h-6 w-16 mx-auto" />
-                    </Table.Cell>
-                    <Table.Cell class="text-right">
-                      <Skeleton class="h-4 w-8 ml-auto" />
+                    <Table.Cell
+                      colspan={6}
+                      class="text-center py-8 text-muted-foreground"
+                    >
+                      No matches found for this player
                     </Table.Cell>
                   </Table.Row>
-                {/each}
-              {/if}
-            </Table.Body>
-          </Table.Root>
+                {:else}
+                  <!-- Skeleton Loading Rows -->
+                  {#each Array(5) as _}
+                    <Table.Row>
+                      <Table.Cell>
+                        <Skeleton class="h-4 w-20" />
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Skeleton class="h-4 w-32" />
+                      </Table.Cell>
+                      <Table.Cell>
+                        <div class="flex items-center gap-1">
+                          <Skeleton class="h-4 w-12" />
+                          <Skeleton class="h-4 w-6" />
+                          <Skeleton class="h-4 w-12" />
+                        </div>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Skeleton class="h-4 w-24" />
+                      </Table.Cell>
+                      <Table.Cell class="text-center">
+                        <Skeleton class="h-6 w-16 mx-auto" />
+                      </Table.Cell>
+                      <Table.Cell class="text-right">
+                        <Skeleton class="h-4 w-8 ml-auto" />
+                      </Table.Cell>
+                    </Table.Row>
+                  {/each}
+                {/if}
+              </Table.Body>
+            </Table.Root>
+          </Tooltip.Provider>
         </Card.Content>
       </Card.Root>
     </div>

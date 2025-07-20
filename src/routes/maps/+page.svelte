@@ -2,14 +2,15 @@
   import "@/app.css";
 
   import { onMount } from "svelte";
+
   import { invoke } from "@tauri-apps/api/core";
+  import type { GravaticBooster } from "gravatic-booster";
   import { toast } from "svelte-sonner";
 
-  import type { GravaticBooster } from "gravatic-booster";
-
+  import MapName from "@/lib/components/MapName.svelte";
+  import { Button } from "@/lib/components/ui/button";
   import * as Select from "@/lib/components/ui/select";
   import * as Table from "@/lib/components/ui/table";
-  import { Button } from "@/lib/components/ui/button";
   import { getGb } from "@/lib/scApi.svelte";
   import { getSettingsStore } from "@/lib/settingsStore.svelte";
 
@@ -18,7 +19,9 @@
 
   let currentSeason: number = $state(0);
   let season: string | undefined = $state(undefined);
-  let maps: Awaited<ReturnType<typeof GravaticBooster.prototype.maps>> = $state([]);
+  let maps: Awaited<ReturnType<typeof GravaticBooster.prototype.maps>> = $state(
+    [],
+  );
   let downloadingMaps = $state(new Set<string>());
 
   const seasons = $derived(
@@ -29,7 +32,11 @@
       .reverse(),
   );
 
-  const downloadMap = async (map: { url: string; fileName: string; seasonId: number }) => {
+  const downloadMap = async (map: {
+    url: string;
+    fileName: string;
+    seasonId: number;
+  }) => {
     if (!settingsStore.initialized) {
       toast.error("Settings not loaded yet. Please try again.");
       return;
@@ -48,16 +55,16 @@
       const result = await invoke<string>("download_file", {
         url: map.url,
         destinationPath: seasonDirectory,
-        filename: map.fileName
+        filename: map.fileName,
       });
-      
+
       toast.success(`Map downloaded successfully`, {
-        description: `Saved to: ${result}`
+        description: `Saved to: ${result}`,
       });
     } catch (error) {
       console.error("Download failed:", error);
       toast.error("Download failed", {
-        description: String(error)
+        description: String(error),
       });
     } finally {
       downloadingMaps.delete(mapKey);
@@ -77,7 +84,9 @@
   <div class="flex items-center justify-between">
     <div>
       <h1 class="text-2xl font-bold">Maps</h1>
-      <p class="text-muted-foreground">StarCraft: Remastered Official Ladder Maps</p>
+      <p class="text-muted-foreground">
+        StarCraft: Remastered Official Ladder Maps
+      </p>
     </div>
     <div class="flex items-center gap-2">
       <Select.Root type="single" name="season" bind:value={season}>
@@ -111,7 +120,9 @@
       {#each maps as map}
         {#if `${map.seasonId}` === season}
           <Table.Row>
-            <Table.Cell class="font-medium">{map.fileName}</Table.Cell>
+            <Table.Cell>
+              <MapName name={map.displayName}></MapName>
+            </Table.Cell>
             <Table.Cell>{map.version}</Table.Cell>
             <Table.Cell>{map.width}x{map.height}</Table.Cell>
             <Table.Cell
@@ -119,7 +130,7 @@
             >
             <Table.Cell class="text-right">
               {@const mapKey = `${map.fileName}_${map.url}`}
-              <Button 
+              <Button
                 onclick={() => downloadMap(map)}
                 disabled={downloadingMaps.has(mapKey)}
                 size="sm"

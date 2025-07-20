@@ -2,14 +2,14 @@
   import "@/app.css";
 
   import { onMount } from "svelte";
+
   import { goto, onNavigate } from "$app/navigation";
+  import type { GravaticBooster, PlayerSearchResult } from "gravatic-booster";
+
+  import * as Avatar from "@/lib/components/ui/avatar";
+  import * as Command from "@/lib/components/ui/command";
   import { getGb } from "@/lib/scApi.svelte";
   import { debounce } from "@/lib/utils";
-
-  import * as Command from "@/lib/components/ui/command";
-  import * as Avatar from "@/lib/components/ui/avatar";
-
-  import type { GravaticBooster, PlayerSearchResult } from "gravatic-booster";
 
   let searching: boolean = $state(false);
   let gb: Promise<GravaticBooster> = getGb();
@@ -44,7 +44,7 @@
   }, 250);
 
   const handlePlayerSelect = (name: string, gateway: string) => {
-    goto(`/player/${name}/${encodeURIComponent(gateway)}`);
+    goto(`/player/${gateway}/${encodeURIComponent(name)}`);
     resetSearching();
   };
 
