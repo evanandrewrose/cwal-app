@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+
   import PlayerSearch from "@/lib/components/PlayerSearch.svelte";
 
   const handlePlayerSelect = (name: string, gateway: string) => {

@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
 
-  import { goto } from "$app/navigation";
   import type { Ranking } from "gravatic-booster";
 
   import PlayerSearch from "@/lib/components/PlayerSearch.svelte";
@@ -13,26 +12,169 @@
 
   const gb = getGb();
 
-  const LOAD_MORE_DELTA = 100;
+  const PAGE_SIZE = 100;
 
   let rankings: Array<Ranking> = $state([]);
-  let fetching = $state(false); // todo reflect state in ui
+  let fetching = $state(false);
   let rankingsGenerator: AsyncGenerator<Ranking, void, unknown> | null = null;
   let scrollableDiv: HTMLDivElement;
+  let selectedPlayerMode = $state(false); // after searching for someone
+  let currentPlayerRank = $state<number | null>(null);
+  let loadedRangeStart = $state<number | null>(null); // context range start
+  let loadedRangeEnd = $state<number | null>(null); // context range end
 
-  const handlePlayerSelect = (name: string, gateway: string) => {
-    goto(`/player/${gateway}/${encodeURIComponent(name)}`);
+  const handlePlayerSelect = async (name: string, gateway: string) => {
+    try {
+      fetching = true;
+      const _gb = await gb;
+
+      // Get the player's ranking to find their position
+      const accountRankings = await _gb.accountRankingsByToon(
+        name,
+        { gateway: parseInt(gateway) },
+        {},
+      );
+
+      const playerRanking = accountRankings.requestedRanking;
+
+      if (playerRanking && playerRanking.rank) {
+        await loadPlayersAroundRank(playerRanking.rank);
+        selectedPlayerMode = true;
+        currentPlayerRank = playerRanking.rank;
+      }
+    } finally {
+      fetching = false;
+    }
+  };
+
+  const resetLadderData = () => {
+    selectedPlayerMode = false;
+    currentPlayerRank = null;
+    loadedRangeStart = null;
+    loadedRangeEnd = null;
+    rankings = [];
+    rankingsGenerator = null;
+    fetchMoreRankings();
+  };
+
+  const loadPlayersAroundRank = async (targetRank: number) => {
+    try {
+      const _gb = await gb;
+
+      const startRank = Math.max(1, targetRank - PAGE_SIZE);
+      const endRank = targetRank + PAGE_SIZE;
+
+      const rankingsGenerator = _gb.rankings(
+        {},
+        startRank - 1, // api is 0-indexed
+        endRank - startRank + 1, // num to request
+      );
+      const newRankings: Ranking[] = [];
+
+      for await (const ranking of rankingsGenerator) {
+        newRankings.push(ranking);
+      }
+
+      rankings = newRankings;
+      loadedRangeStart = startRank;
+      loadedRangeEnd = startRank + newRankings.length;
+
+      await tick(); // ensure dom updates before we scroll to expected element
+
+      const playerRow = document.querySelector(`[data-rank="${targetRank}"]`);
+      if (playerRow) {
+        playerRow.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    } catch (error) {
+      console.error("Error loading players around rank:", error);
+    }
+  };
+
+  const loadPreviousPage = async () => {
+    if (loadedRangeStart === null) {
+      return;
+    }
+
+    try {
+      fetching = true;
+      const _gb = await gb;
+
+      const newStartRank = Math.max(1, loadedRangeStart - PAGE_SIZE);
+      const newEndRank = loadedRangeStart - 1;
+
+      const rankingsGenerator = _gb.rankings(
+        {},
+        newStartRank - 1,
+        newEndRank - newStartRank + 1,
+      );
+      const newRankings: Ranking[] = [];
+
+      for await (const ranking of rankingsGenerator) {
+        newRankings.push(ranking);
+      }
+
+      if (newRankings.length > 0) {
+        rankings = [...newRankings, ...rankings];
+        loadedRangeStart = newStartRank;
+      }
+    } catch (error) {
+      console.error("Error loading previous page:", error);
+    } finally {
+      fetching = false;
+    }
+  };
+
+  const loadNextPage = async () => {
+    if (!selectedPlayerMode || loadedRangeEnd === null || fetching) return;
+
+    try {
+      fetching = true;
+      const _gb = await gb;
+
+      const newStartRank = loadedRangeEnd + 1;
+      const newEndRank = loadedRangeEnd + PAGE_SIZE;
+
+      const rankingsGenerator = _gb.rankings(
+        {},
+        newStartRank - 1,
+        newEndRank - newStartRank + 1,
+      );
+      const newRankings: Ranking[] = [];
+
+      for await (const ranking of rankingsGenerator) {
+        newRankings.push(ranking);
+      }
+
+      if (newRankings.length > 0) {
+        rankings = [...rankings, ...newRankings];
+        loadedRangeEnd = newStartRank + newRankings.length - 1;
+      }
+    } catch (error) {
+      console.error("Error loading next page:", error);
+    } finally {
+      fetching = false;
+    }
   };
 
   onMount(() => {
-    // todo; a better method would be to detect if we don't have a scrollbar yet and keep fetching until that happens
     fetchMoreRankings();
   });
 
   const onScroll = () => {
+    if (fetching) {
+      return;
+    }
+
     const { scrollHeight, scrollTop, clientHeight } = scrollableDiv;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    if (distanceFromBottom <= 200) {
+
+    if (distanceFromBottom > 200) {
+      return;
+    }
+
+    if (selectedPlayerMode) {
+      loadNextPage();
+    } else {
       fetchMoreRankings();
     }
   };
@@ -45,7 +187,7 @@
         rankingsGenerator = _gb.rankings({});
       }
 
-      for (let i = 0; i < LOAD_MORE_DELTA; ++i) {
+      for (let i = 0; i < PAGE_SIZE; ++i) {
         const next = await rankingsGenerator.next();
         if (next.done) {
           break;
@@ -70,8 +212,45 @@
   bind:this={scrollableDiv}
 >
   <PlayerSearch onPlayerSelect={handlePlayerSelect} />
+
+  {#if selectedPlayerMode && currentPlayerRank && loadedRangeStart && loadedRangeStart > 1}
+    <div class="mb-4 p-3 bg-muted/20 rounded-lg border">
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-muted-foreground">
+          Showing players around rank #{currentPlayerRank}
+        </span>
+        <div class="flex items-center gap-4">
+          {#if loadedRangeStart && loadedRangeStart > 1}
+            <button
+              class="text-xs text-primary hover:text-primary/80 underline disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              onclick={loadPreviousPage}
+              disabled={fetching}
+            >
+              {#if fetching}
+                Loading...
+              {:else}
+                Load more above
+              {/if}
+            </button>
+          {/if}
+          <button
+            class="text-xs text-primary hover:text-primary/80 underline cursor-pointer"
+            onclick={resetLadderData}
+          >
+            Show full ladder
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <Table.Root>
-    <Table.Caption>StarCraft: Remastered Ladder</Table.Caption>
+    <Table.Caption>
+      StarCraft: Remastered Ladder
+      {#if fetching}
+        <span class="text-xs text-muted-foreground ml-2">(Loading...)</span>
+      {/if}
+    </Table.Caption>
     <Table.Header>
       <Table.Row>
         <Table.Head></Table.Head>
@@ -85,7 +264,12 @@
     </Table.Header>
     <Table.Body>
       {#each rankings as ranking}
-        <Table.Row>
+        <Table.Row
+          data-rank={ranking.rank}
+          class={ranking.rank === currentPlayerRank
+            ? "bg-primary/20 ring-1 ring-primary/50"
+            : ""}
+        >
           <Table.Cell>{ranking.rank}</Table.Cell>
           <Table.Cell class="min-w-max">
             <a
