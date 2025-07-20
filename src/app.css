@@ -2,6 +2,12 @@
 
 @import "tw-animate-css";
 
+@font-face {
+  font-family: 'BabelStone Flags';
+  src: url('/BabelStoneFlags.ttf') format('truetype');
+  font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -117,5 +123,11 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .flag-emoji {
+    font-family: 'BabelStone Flags', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
   }
 }
