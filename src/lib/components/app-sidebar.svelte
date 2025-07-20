@@ -1,12 +1,18 @@
 <script lang="ts">
   import MapIcon from "@lucide/svelte/icons/map";
+  import SearchIcon from "@lucide/svelte/icons/search";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import LadderIcon from "@lucide/svelte/icons/waves-ladder";
 
-  import * as Sidebar from "@/lib/components/ui/sidebar";
   import StarCraftStatus from "@/lib/components/StarCraftStatus.svelte";
+  import * as Sidebar from "@/lib/components/ui/sidebar";
 
   const items = [
+    {
+      title: "Search",
+      url: "/search",
+      icon: SearchIcon,
+    },
     {
       title: "Ladder",
       url: "/ladder",
