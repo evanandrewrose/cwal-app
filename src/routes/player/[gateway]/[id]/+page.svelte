@@ -106,106 +106,82 @@
   >
     <div class="p-6 space-y-6">
       <!-- Player Header -->
-      <div class="flex items-center justify-between">
+      <div class="bg-muted/20 rounded-lg p-4">
         <div class="flex items-center gap-4">
-          <Avatar.Root class="w-16 h-16">
+          <Avatar.Root class="w-14 h-14">
             <Avatar.Image src={avatar} alt="Player Avatar" />
-            <Avatar.Fallback class="text-lg font-bold">{id.slice(0, 2).toUpperCase()}</Avatar.Fallback>
+            <Avatar.Fallback class="text-base font-bold">{id.slice(0, 2).toUpperCase()}</Avatar.Fallback>
           </Avatar.Root>
-          <div>
-            <div class="flex items-center gap-3 mb-1">
-              <h1 class="text-3xl font-bold">{id}</h1>
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-1">
+              <h1 class="text-2xl font-bold">{id}</h1>
               {#if ranking?.featureRace}
-                <Race race={ranking.featureRace} />
+                <div class="px-2 py-1 bg-background rounded text-sm">
+                  <Race race={ranking.featureRace} />
+                </div>
               {/if}
             </div>
-            <p class="text-muted-foreground">Gateway: {ranking?.gateway?.name || gateway}</p>
+            <p class="text-sm text-muted-foreground">
+              {ranking?.gateway?.name || `Gateway ${gateway}`}
+            </p>
           </div>
         </div>
       </div>
 
-      <!-- Player Stats Cards -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <!-- Player Stats - Compact -->
+      <div class="bg-muted/20 rounded-lg p-4">
         {#if profile && ranking}
-          <Card.Root>
-            <Card.Header class="pb-2">
-              <Card.Title class="text-sm font-medium text-muted-foreground">Current Ranking</Card.Title>
-            </Card.Header>
-            <Card.Content>
-              <div class="flex items-center gap-3 mb-2">
-                <div class="text-2xl font-bold">#{ranking.rank || 'Unranked'}</div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+            <div class="space-y-1">
+              <div class="flex items-center justify-center gap-2">
+                <span class="text-lg font-bold">#{ranking.rank || 'Unranked'}</span>
                 {#if ranking.tier}
                   <Rank rank={ranking.tier} />
                 {/if}
               </div>
               <p class="text-xs text-muted-foreground">
-                {ranking.rating ? `${ranking.rating} Rating` : 'No rating data'}
+                {ranking.rating ? `${ranking.rating} Rating` : 'Current Ranking'}
               </p>
-            </Card.Content>
-          </Card.Root>
+            </div>
 
-          <Card.Root>
-            <Card.Header class="pb-2">
-              <Card.Title class="text-sm font-medium text-muted-foreground">Games This Week</Card.Title>
-            </Card.Header>
-            <Card.Content>
-              <div class="text-2xl font-bold">{profile.requestedProfile?.numGamesLastWeek || 0}</div>
-              <p class="text-xs text-muted-foreground">
-                Season {profile.currentSeason}
-              </p>
-            </Card.Content>
-          </Card.Root>
+            <div class="space-y-1">
+              <div class="text-lg font-bold">{profile.requestedProfile?.numGamesLastWeek || 0}</div>
+              <p class="text-xs text-muted-foreground">Games This Week</p>
+            </div>
 
-          <Card.Root>
-            <Card.Header class="pb-2">
-              <Card.Title class="text-sm font-medium text-muted-foreground">Win Rate</Card.Title>
-            </Card.Header>
-            <Card.Content>
-              <div class="text-2xl font-bold">
+            <div class="space-y-1">
+              <div class="text-lg font-bold">
                 {ranking?.wins && ranking?.losses 
                   ? `${Math.round((ranking.wins / (ranking.wins + ranking.losses)) * 100)}%`
                   : 'N/A'
                 }
               </div>
               <p class="text-xs text-muted-foreground">
-                {ranking?.wins || 0}W / {ranking?.losses || 0}L
+                Win Rate ({ranking?.wins || 0}W/{ranking?.losses || 0}L)
               </p>
-            </Card.Content>
-          </Card.Root>
+            </div>
+          </div>
         {:else}
-          <!-- Skeleton Loading States -->
-          <Card.Root>
-            <Card.Header class="pb-2">
-              <Card.Title class="text-sm font-medium text-muted-foreground">Current Ranking</Card.Title>
-            </Card.Header>
-            <Card.Content>
-              <div class="flex items-center gap-3 mb-2">
-                <Skeleton class="h-8 w-24" />
-                <Skeleton class="h-6 w-8" />
+          <!-- Compact Skeleton Loading -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+            <div class="space-y-1">
+              <div class="flex items-center justify-center gap-2">
+                <Skeleton class="h-6 w-16" />
+                <Skeleton class="h-5 w-6" />
               </div>
-              <Skeleton class="h-3 w-20" />
-            </Card.Content>
-          </Card.Root>
+              <Skeleton class="h-3 w-20 mx-auto" />
+            </div>
 
-          <Card.Root>
-            <Card.Header class="pb-2">
-              <Card.Title class="text-sm font-medium text-muted-foreground">Games This Week</Card.Title>
-            </Card.Header>
-            <Card.Content>
-              <Skeleton class="h-8 w-16 mb-2" />
-              <Skeleton class="h-3 w-16" />
-            </Card.Content>
-          </Card.Root>
+            <div class="space-y-1">
+              <Skeleton class="h-6 w-8 mx-auto" />
+              <Skeleton class="h-3 w-20 mx-auto" />
+            </div>
 
-          <Card.Root>
-            <Card.Header class="pb-2">
-              <Card.Title class="text-sm font-medium text-muted-foreground">Win Rate</Card.Title>
-            </Card.Header>
-            <Card.Content>
-              <Skeleton class="h-8 w-20 mb-2" />
-              <Skeleton class="h-3 w-24" />
-            </Card.Content>
-          </Card.Root>
+            <div class="space-y-1">
+              <Skeleton class="h-6 w-12 mx-auto" />
+              <Skeleton class="h-3 w-24 mx-auto" />
+            </div>
+          </div>
         {/if}
       </div>
 
