@@ -3,8 +3,8 @@
 @import "tw-animate-css";
 
 @font-face {
-  font-family: 'BabelStone Flags';
-  src: url('/BabelStoneFlags.ttf') format('truetype');
+  font-family: "BabelStone Flags";
+  src: url("/BabelStoneFlags.ttf") format("truetype");
   font-display: swap;
 }
 
@@ -128,6 +128,8 @@
 
 @layer components {
   .flag-emoji {
-    font-family: 'BabelStone Flags', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+    font-family:
+      "BabelStone Flags", "Apple Color Emoji", "Segoe UI Emoji",
+      "Noto Color Emoji", sans-serif;
   }
 }
