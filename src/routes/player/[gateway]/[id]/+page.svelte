@@ -1,16 +1,20 @@
 <script lang="ts">
   import { afterNavigate } from "$app/navigation";
+  import { invoke } from "@tauri-apps/api/core";
   import type { GravaticBooster, Match, Ranking } from "gravatic-booster";
+  import { toast } from "svelte-sonner";
 
   import MapName from "@/lib/components/MapName.svelte";
   import Race from "@/lib/components/icons/race.svelte";
   import Rank from "@/lib/components/icons/rank.svelte";
   import * as Avatar from "@/lib/components/ui/avatar";
+  import { Button } from "@/lib/components/ui/button";
   import * as Card from "@/lib/components/ui/card";
   import { Skeleton } from "@/lib/components/ui/skeleton";
   import * as Table from "@/lib/components/ui/table";
   import * as Tooltip from "@/lib/components/ui/tooltip";
   import { getGb, sleep } from "@/lib/scApi.svelte";
+  import { getSettingsStore } from "@/lib/settingsStore.svelte";
   import { avatarOrDefault } from "@/lib/utils";
 
   import type { PageProps } from "./$types";
@@ -23,6 +27,7 @@
   const MATCH_FETCH_NUM = 15;
 
   const gb = getGb();
+  const settingsStore = getSettingsStore();
 
   let profile: Awaited<
     ReturnType<
@@ -34,6 +39,7 @@
   let matchesGenerator: AsyncGenerator<Match, void, void> | null = null;
   let matches: Match[] = $state([]);
   let scrollableDiv: HTMLDivElement | null = $state(null);
+  let downloadingReplays = $state(new Set<string>());
 
   const getMatchResult = (player: any) => {
     if (
@@ -82,6 +88,16 @@
     return scrollableDiv.scrollHeight > scrollableDiv.clientHeight;
   };
 
+  const sanitizeFilename = (filename: string): string => {
+    // Replace invalid Windows filename characters with underscores
+    return filename.replace(/[<>:"/\\|?*]/g, "_");
+  };
+
+  const getRaceInitial = (race: string | undefined): string => {
+    if (!race || race.length === 0) return "U";
+    return race[0].toUpperCase();
+  };
+
   const fetchUntilScrollbarOrEnd = async () => {
     let shouldContinue = true;
     while (shouldContinue) {
@@ -111,6 +127,60 @@
 
     if (distanceFromBottom <= 200) {
       fetchMoreMatches();
+    }
+  };
+
+  const downloadReplay = async (match: Match) => {
+    if (!settingsStore.initialized) {
+      toast.error("Settings not loaded yet. Please try again.");
+      return;
+    }
+
+    const replayKey = `${match.id || match.timestamp?.getTime() || Math.random()}`;
+    if (downloadingReplays.has(replayKey)) {
+      return;
+    }
+
+    downloadingReplays.add(replayKey);
+    downloadingReplays = new Set(downloadingReplays);
+
+    try {
+      const replays = await match.replays;
+      const replay = replays.anyReplay;
+
+      if (!replay) {
+        toast.error("No replay available for this match");
+        return;
+      }
+
+      // Create formatted filename with player info
+      const formattedDate =
+        match.timestamp?.toISOString().slice(0, 10) || "unknown";
+      const p1Alias = match.thisPlayer?.toon || "Unknown";
+      const p1Race = getRaceInitial(match.thisPlayer?.race);
+      const p2Alias = match.opponent?.toon || "Unknown";
+      const p2Race = getRaceInitial(match.opponent?.race);
+
+      const replayDownloadName = sanitizeFilename(
+        `${formattedDate}_${p1Alias}(${p1Race})_vs_${p2Alias}(${p2Race}).rep`,
+      );
+      const result = await invoke<string>("download_file", {
+        url: replay.url,
+        destinationPath: settingsStore.settings.replayDownloadPath,
+        filename: replayDownloadName,
+      });
+
+      toast.success(`Replay downloaded successfully`, {
+        description: `Saved to: ${result}`,
+      });
+    } catch (error) {
+      console.error("Download failed:", error);
+      toast.error("Download failed", {
+        description: String(error),
+      });
+    } finally {
+      downloadingReplays.delete(replayKey);
+      downloadingReplays = new Set(downloadingReplays);
     }
   };
 
@@ -247,6 +317,7 @@
                   <Table.Head>Opponent</Table.Head>
                   <Table.Head class="text-center">Result</Table.Head>
                   <Table.Head class="text-right">MMR</Table.Head>
+                  <Table.Head class="text-right"></Table.Head>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
@@ -346,12 +417,26 @@
                           <span class="text-muted-foreground text-sm">—</span>
                         {/if}
                       </Table.Cell>
+                      <Table.Cell class="text-right">
+                        {@const replayKey = `${match.id || match.timestamp?.getTime() || Math.random()}`}
+                        <Button
+                          onclick={() => downloadReplay(match)}
+                          disabled={downloadingReplays.has(replayKey)}
+                          size="sm"
+                          variant="outline"
+                          class="cursor-pointer"
+                        >
+                          {downloadingReplays.has(replayKey)
+                            ? "Downloading..."
+                            : "Download"}
+                        </Button>
+                      </Table.Cell>
                     </Table.Row>
                   {/each}
                 {:else if profile && ranking}
                   <Table.Row>
                     <Table.Cell
-                      colspan={6}
+                      colspan={7}
                       class="text-center py-8 text-muted-foreground"
                     >
                       No matches found for this player
@@ -382,6 +467,9 @@
                       </Table.Cell>
                       <Table.Cell class="text-right">
                         <Skeleton class="h-4 w-8 ml-auto" />
+                      </Table.Cell>
+                      <Table.Cell class="text-right">
+                        <Skeleton class="h-6 w-20 ml-auto" />
                       </Table.Cell>
                     </Table.Row>
                   {/each}
