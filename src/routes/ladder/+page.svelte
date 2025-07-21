@@ -57,23 +57,31 @@
     fetchMoreRankings();
   };
 
+  const loadRankingsInRange = async (
+    startRank: number,
+    endRank: number,
+  ): Promise<Ranking[]> => {
+    const _gb = await gb;
+    const rankingsGenerator = _gb.rankings(
+      {},
+      startRank - 1, // api is 0-indexed
+      endRank - startRank + 1, // num to request
+    );
+    const newRankings: Ranking[] = [];
+
+    for await (const ranking of rankingsGenerator) {
+      newRankings.push(ranking);
+    }
+
+    return newRankings;
+  };
+
   const loadPlayersAroundRank = async (targetRank: number) => {
     try {
-      const _gb = await gb;
-
       const startRank = Math.max(1, targetRank - PAGE_SIZE);
       const endRank = targetRank + PAGE_SIZE;
 
-      const rankingsGenerator = _gb.rankings(
-        {},
-        startRank - 1, // api is 0-indexed
-        endRank - startRank + 1, // num to request
-      );
-      const newRankings: Ranking[] = [];
-
-      for await (const ranking of rankingsGenerator) {
-        newRankings.push(ranking);
-      }
+      const newRankings = await loadRankingsInRange(startRank, endRank);
 
       rankings = newRankings;
       loadedRangeStart = startRank;
@@ -97,21 +105,10 @@
 
     try {
       fetching = true;
-      const _gb = await gb;
-
       const newStartRank = Math.max(1, loadedRangeStart - PAGE_SIZE);
       const newEndRank = loadedRangeStart - 1;
 
-      const rankingsGenerator = _gb.rankings(
-        {},
-        newStartRank - 1,
-        newEndRank - newStartRank + 1,
-      );
-      const newRankings: Ranking[] = [];
-
-      for await (const ranking of rankingsGenerator) {
-        newRankings.push(ranking);
-      }
+      const newRankings = await loadRankingsInRange(newStartRank, newEndRank);
 
       if (newRankings.length > 0) {
         rankings = [...newRankings, ...rankings];
@@ -129,21 +126,10 @@
 
     try {
       fetching = true;
-      const _gb = await gb;
-
       const newStartRank = loadedRangeEnd + 1;
       const newEndRank = loadedRangeEnd + PAGE_SIZE;
 
-      const rankingsGenerator = _gb.rankings(
-        {},
-        newStartRank - 1,
-        newEndRank - newStartRank + 1,
-      );
-      const newRankings: Ranking[] = [];
-
-      for await (const ranking of rankingsGenerator) {
-        newRankings.push(ranking);
-      }
+      const newRankings = await loadRankingsInRange(newStartRank, newEndRank);
 
       if (newRankings.length > 0) {
         rankings = [...rankings, ...newRankings];
