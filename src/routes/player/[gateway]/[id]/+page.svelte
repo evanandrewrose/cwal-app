@@ -374,14 +374,29 @@
                         </div>
                       </Table.Cell>
                       <Table.Cell>
-                        {#if match.opponent?.toon}
+                        {#if match.opponent?.profileInfo?.gatewayId && match.opponent?.toon}
                           <a
-                            href="/player/{match.opponent?.profileInfo
-                              ?.gatewayId}/{match.opponent?.toon}"
-                            class="text-primary hover:underline"
+                            href="/player/{match.opponent.profileInfo
+                              .gatewayId}/{match.opponent.toon}"
+                            class="text-primary hover:underline cursor-pointer"
                           >
                             {match.opponent.toon}
                           </a>
+                        {:else if match.opponent?.toon}
+                          <span class="text-primary">
+                            <Tooltip.Root>
+                              <Tooltip.Trigger
+                                class="text-muted-foreground/70 hover:text-muted-foreground cursor-help"
+                              >
+                                {match.opponent.toon}
+                              </Tooltip.Trigger>
+                              <Tooltip.Content>
+                                <p class="text-sm">
+                                  This player's profile no longer exists
+                                </p>
+                              </Tooltip.Content>
+                            </Tooltip.Root>
+                          </span>
                         {:else}
                           Unknown
                         {/if}

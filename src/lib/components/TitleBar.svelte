@@ -13,11 +13,14 @@
     class="flex justify-between items-center bg-clip-border rounded-b-none"
     data-tauri-drag-region
   >
-    <div class="flex-1"></div>
-    <div class="flex-1 flex justify-center">
-      <span class="text-sm font-medium text-muted-foreground">cwal.gg</span>
+    <div data-tauri-drag-region class="flex-1"></div>
+    <div data-tauri-drag-region class="flex-1 flex justify-center">
+      <span
+        data-tauri-drag-region
+        class="text-sm font-medium text-muted-foreground">cwal.gg</span
+      >
     </div>
-    <div class="flex-1 flex justify-end">
+    <div data-tauri-drag-region class="flex-1 flex justify-end">
       <Menubar.Menu>
         <Button
           onclick={() => window.minimize()}
