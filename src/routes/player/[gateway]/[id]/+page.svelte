@@ -1,7 +1,12 @@
 <script lang="ts">
   import { afterNavigate } from "$app/navigation";
   import { invoke } from "@tauri-apps/api/core";
-  import type { GravaticBooster, Match, Ranking } from "gravatic-booster";
+  import type {
+    GravaticBooster,
+    Match,
+    Ranking,
+    Replay,
+  } from "gravatic-booster";
   import { toast } from "svelte-sonner";
 
   import CountryFlag from "@/lib/components/CountryFlag.svelte";
@@ -53,18 +58,7 @@
   };
 
   const getResultDisplay = (result: string) => {
-    switch (result) {
-      case "win":
-        return "Win";
-      case "loss":
-        return "Loss";
-      case "draw":
-        return "Draw";
-      case "undecided":
-        return "Undecided";
-      default:
-        return "Unknown";
-    }
+    return result.charAt(0).toUpperCase() + result.slice(1);
   };
 
   const fetchMoreMatches = async () => {
@@ -90,13 +84,25 @@
   };
 
   const sanitizeFilename = (filename: string): string => {
-    // Replace invalid Windows filename characters with underscores
     return filename.replace(/[<>:"/\\|?*]/g, "_");
   };
 
   const getRaceInitial = (race: string | undefined): string => {
     if (!race || race.length === 0) return "U";
     return race[0].toUpperCase();
+  };
+
+  const generateReplayFilename = (match: Match, replay: Replay): string => {
+    const timestamp = match.timestamp ?? replay.timestamp;
+    const formattedDate = timestamp?.toISOString() || "unknown";
+    const p1Alias = match.thisPlayer?.toon || "Unknown";
+    const p1Race = getRaceInitial(match.thisPlayer?.race);
+    const p2Alias = match.opponent?.toon || "Unknown";
+    const p2Race = getRaceInitial(match.opponent?.race);
+
+    return sanitizeFilename(
+      `${formattedDate}_${p1Alias}(${p1Race})_vs_${p2Alias}(${p2Race}).rep`,
+    );
   };
 
   const fetchUntilScrollbarOrEnd = async () => {
@@ -154,17 +160,7 @@
         return;
       }
 
-      // Create formatted filename with player info
-      const timestamp = match.timestamp ?? replay.timestamp;
-      const formattedDate = timestamp?.toISOString().slice(0, 10) || "unknown";
-      const p1Alias = match.thisPlayer?.toon || "Unknown";
-      const p1Race = getRaceInitial(match.thisPlayer?.race);
-      const p2Alias = match.opponent?.toon || "Unknown";
-      const p2Race = getRaceInitial(match.opponent?.race);
-
-      const replayDownloadName = sanitizeFilename(
-        `${formattedDate}_${p1Alias}(${p1Race})_vs_${p2Alias}(${p2Race}).rep`,
-      );
+      const replayDownloadName = generateReplayFilename(match, replay);
       const result = await invoke<string>("download_file", {
         url: replay.url,
         destinationPath: settingsStore.settings.replayDownloadPath,
@@ -175,7 +171,6 @@
         description: `Saved to: ${result}`,
       });
     } catch (error) {
-      console.error("Download failed:", error);
       toast.error("Download failed", {
         description: String(error),
       });
@@ -212,10 +207,8 @@
     bind:this={scrollableDiv}
   >
     <div class="p-6 space-y-6">
-      <!-- Player Header -->
       <div class="bg-muted/20 rounded-lg p-6">
         <div class="flex items-start justify-between gap-6">
-          <!-- Left Side: Avatar and Name -->
           <div class="flex items-start gap-6">
             <Avatar.Root class="w-20 h-20 flex-shrink-0">
               <Avatar.Image src={avatar} alt="Player Avatar" />
@@ -238,7 +231,6 @@
             </div>
           </div>
 
-          <!-- Right Side: Country and Gateway -->
           <div class="flex-shrink-0 space-y-3 text-right">
             {#if profile?.countryCode}
               <CountryFlag countryCode={profile.countryCode} />
@@ -247,7 +239,6 @@
         </div>
       </div>
 
-      <!-- Player Stats - Compact -->
       <div class="bg-muted/20 rounded-lg p-4">
         {#if profile && ranking}
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
@@ -260,11 +251,11 @@
                   <Rank rank={ranking.tier} />
                 {/if}
               </div>
-              <p class="text-xs text-muted-foreground">
-                {ranking.rating
-                  ? `${ranking.rating} Rating`
-                  : "Current Ranking"}
-              </p>
+              {#if ranking.rating}
+                <p class="text-xs text-muted-foreground">
+                  ${ranking.rating} MMR
+                </p>
+              {/if}
             </div>
 
             <div class="space-y-1">
@@ -286,7 +277,6 @@
             </div>
           </div>
         {:else}
-          <!-- Compact Skeleton Loading -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
             <div class="space-y-1">
               <div class="flex items-center justify-center gap-2">
@@ -309,7 +299,6 @@
         {/if}
       </div>
 
-      <!-- Recent Matches -->
       <Card.Root>
         <Card.Header>
           <Card.Title>Recent Matches</Card.Title>
@@ -454,7 +443,6 @@
                     </Table.Cell>
                   </Table.Row>
                 {:else}
-                  <!-- Skeleton Loading Rows -->
                   {#each Array(5) as _}
                     <Table.Row>
                       <Table.Cell>
