@@ -7,7 +7,7 @@
 
   const { rank }: Props = $props();
 
-  const value = rank[0].toUpperCase();
+  const value = $derived(rank[0].toUpperCase());
 </script>
 
 {#if value === "S"}
