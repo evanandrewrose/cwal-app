@@ -11,10 +11,7 @@
 
 <svelte:head>
   <title>Error - CWAL</title>
-  <meta
-    name="description"
-    content="Something went wrong"
-  />
+  <meta name="description" content="Something went wrong" />
 </svelte:head>
 
 <div class="flex flex-col items-center justify-center min-h-[60vh] px-4">
@@ -26,9 +23,12 @@
     </div>
 
     <div class="mb-4">
-      <h2 class="text-4xl font-bold text-foreground mb-2">Something went wrong</h2>
+      <h2 class="text-4xl font-bold text-foreground mb-2">
+        Something went wrong
+      </h2>
       <p class="text-lg text-muted-foreground">
-        We encountered an unexpected error. Please try again or return to the main page.
+        We encountered an unexpected error. Please try again or return to the
+        main page.
       </p>
     </div>
 
