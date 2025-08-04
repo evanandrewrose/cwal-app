@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { Check, Clock, RotateCcw } from "@lucide/svelte";
+  import { RotateCcw } from "@lucide/svelte";
 
-  import { Badge } from "@/lib/components/ui/badge";
   import { Button } from "@/lib/components/ui/button";
   import {
     Card,
@@ -11,12 +10,14 @@
     CardTitle,
   } from "@/lib/components/ui/card";
   import { Input } from "@/lib/components/ui/input";
+  import { Switch } from "@/lib/components/ui/switch";
   import { getSettingsStore } from "@/lib/settingsStore.svelte";
 
   const settingsStore = getSettingsStore();
 
   let replayPath = $state("");
   let mapPath = $state("");
+  let hideShortReplays = $state(false);
 
   let resolvedDefaults = $state<{
     replayDownloadPath: string;
@@ -26,13 +27,11 @@
   let replayPathTimer: number | null = null;
   let mapPathTimer: number | null = null;
 
-  let replayPathSaved = $state(true);
-  let mapPathSaved = $state(true);
-
   $effect(() => {
     if (settingsStore.initialized) {
       replayPath = settingsStore.settings.replayDownloadPath;
       mapPath = settingsStore.settings.mapDownloadPath;
+      hideShortReplays = settingsStore.settings.hideShortReplays;
 
       settingsStore.getResolvedDefaults().then((defaults) => {
         resolvedDefaults = defaults;
@@ -45,8 +44,6 @@
       settingsStore.initialized &&
       replayPath !== settingsStore.settings.replayDownloadPath
     ) {
-      replayPathSaved = false;
-
       if (replayPathTimer !== null) {
         clearTimeout(replayPathTimer);
       }
@@ -54,7 +51,6 @@
       replayPathTimer = setTimeout(async () => {
         if (replayPath.trim()) {
           await settingsStore.updateReplayPath(replayPath.trim());
-          replayPathSaved = true;
         }
       }, 500);
     }
@@ -65,8 +61,6 @@
       settingsStore.initialized &&
       mapPath !== settingsStore.settings.mapDownloadPath
     ) {
-      mapPathSaved = false;
-
       if (mapPathTimer !== null) {
         clearTimeout(mapPathTimer);
       }
@@ -74,9 +68,17 @@
       mapPathTimer = setTimeout(async () => {
         if (mapPath.trim()) {
           await settingsStore.updateMapPath(mapPath.trim());
-          mapPathSaved = true;
         }
       }, 500);
+    }
+  });
+
+  $effect(() => {
+    if (
+      settingsStore.initialized &&
+      hideShortReplays !== settingsStore.settings.hideShortReplays
+    ) {
+      settingsStore.updateHideShortReplays(hideShortReplays);
     }
   });
 
@@ -84,8 +86,7 @@
     await settingsStore.resetToDefaults();
     replayPath = settingsStore.settings.replayDownloadPath;
     mapPath = settingsStore.settings.mapDownloadPath;
-    replayPathSaved = true;
-    mapPathSaved = true;
+    hideShortReplays = settingsStore.settings.hideShortReplays;
   };
 
   const resetReplayPath = async () => {
@@ -99,16 +100,6 @@
       mapPath = resolvedDefaults.mapDownloadPath;
     }
   };
-
-  const getStatusBadge = (isSaving: boolean, isSaved: boolean) => {
-    if (isSaving) {
-      return { variant: "secondary" as const, icon: Clock, text: "Saving..." };
-    } else if (isSaved) {
-      return { variant: "default" as const, icon: Check, text: "Saved" };
-    } else {
-      return { variant: "outline" as const, icon: Clock, text: "Pending" };
-    }
-  }
 </script>
 
 <div class="p-6 space-y-6">
@@ -144,16 +135,6 @@
               <RotateCcw class="size-3 mr-1" />
               Reset
             </Button>
-            {#if settingsStore.initialized}
-              {@const status = getStatusBadge(
-                settingsStore.savingReplayPath,
-                replayPathSaved,
-              )}
-              <Badge variant={status.variant} class="flex items-center gap-1">
-                <status.icon class="size-3" />
-                {status.text}
-              </Badge>
-            {/if}
           </div>
         </div>
         <Input
@@ -187,16 +168,6 @@
               <RotateCcw class="size-3 mr-1" />
               Reset
             </Button>
-            {#if settingsStore.initialized}
-              {@const status = getStatusBadge(
-                settingsStore.savingMapPath,
-                mapPathSaved,
-              )}
-              <Badge variant={status.variant} class="flex items-center gap-1">
-                <status.icon class="size-3" />
-                {status.text}
-              </Badge>
-            {/if}
           </div>
         </div>
         <Input
@@ -223,6 +194,32 @@
           <RotateCcw class="size-3 mr-1" />
           Reset All to Defaults
         </Button>
+      </div>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle>Replay Preferences</CardTitle>
+      <CardDescription>
+        Configure how replays are organized and handled.
+      </CardDescription>
+    </CardHeader>
+    <CardContent class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="space-y-1">
+          <label class="text-sm font-medium" for="hide-short-replays">
+            Hide short replays
+          </label>
+          <p class="text-xs text-muted-foreground">
+            Automatically move replays shorter than 1 minute to a hidden directory
+          </p>
+        </div>
+        <Switch
+          id="hide-short-replays"
+          bind:checked={hideShortReplays}
+          class="cursor-pointer"
+        />
       </div>
     </CardContent>
   </Card>

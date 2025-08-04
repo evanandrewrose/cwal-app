@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { afterNavigate } from "$app/navigation";
+  import { afterNavigate, goto } from "$app/navigation";
+  import { page } from "$app/stores";
   import { invoke } from "@tauri-apps/api/core";
+  import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
   import type {
     GravaticBooster,
     Match,
@@ -16,6 +18,7 @@
   import * as Avatar from "@/lib/components/ui/avatar";
   import { Button } from "@/lib/components/ui/button";
   import * as Card from "@/lib/components/ui/card";
+  import * as Dialog from "@/lib/components/ui/dialog";
   import { Skeleton } from "@/lib/components/ui/skeleton";
   import * as Table from "@/lib/components/ui/table";
   import * as Tooltip from "@/lib/components/ui/tooltip";
@@ -24,6 +27,35 @@
   import { avatarOrDefault } from "@/lib/utils";
 
   import type { PageProps } from "./$types";
+
+  interface ChatMessage {
+    timestamp: number;
+    player: string;
+    player_id: number;
+    message: string;
+  }
+
+  interface ReplayData {
+    id: string;
+    parsed_data: {
+      id: string;
+      map_name: string;
+      game_duration_ms: number;
+      players: Array<{
+        id: number;
+        name: string;
+        race: string;
+        color: {
+          name: string;
+          rgb: number;
+        };
+        apm: number;
+      }>;
+      chat_messages: ChatMessage[];
+    };
+    cached: boolean;
+    timestamp: string;
+  }
 
   const { data }: PageProps = $props();
 
@@ -46,6 +78,10 @@
   let matches: Match[] = $state([]);
   let scrollableDiv: HTMLDivElement | null = $state(null);
   let downloadingReplays = $state(new Set<string>());
+  let replayDataCache = $state(new Map<string, ReplayData>());
+  let loadingReplayData = $state(new Set<string>());
+  let selectedChatMessages: ChatMessage[] = $state([]);
+  let showChatDialog = $state(false);
 
   const getMatchResult = (player: any) => {
     if (
@@ -66,14 +102,33 @@
       return false;
     }
     let fetchedAny = false;
-    for (let i = 0; i < MATCH_FETCH_NUM; ++i) {
-      const next = await matchesGenerator.next();
-      if (next.done) {
-        break;
-      }
+    try {
+      for (let i = 0; i < MATCH_FETCH_NUM; ++i) {
+        const next = await matchesGenerator.next();
+        if (next.done) {
+          break;
+        }
 
-      matches.push(next.value!);
-      fetchedAny = true;
+        matches.push(next.value!);
+        fetchedAny = true;
+      }
+    } catch (error) {
+      console.error("Failed to fetch more matches:", error);
+
+      // If we have no matches yet, this is likely a fundamental error (like EntityNotFoundError)
+      // so redirect to error page. If we already have some matches, just show a toast.
+      if (matches.length === 0) {
+        console.error(
+          "Initial match loading failed, redirecting to error page",
+        );
+        goto(`/error?from=${encodeURIComponent($page.url.pathname)}`);
+        return false;
+      } else {
+        // Show toast for background loading errors when we already have some matches
+        toast.error("Failed to load more matches", {
+          description: "There was an error loading additional match data.",
+        });
+      }
     }
     return fetchedAny;
   };
@@ -105,20 +160,89 @@
     );
   };
 
+  const formatDuration = (durationMs: number): string => {
+    const totalSeconds = Math.floor(durationMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}m${seconds.toString().padStart(2, "0")}s`;
+  };
+
+  const fetchReplayData = async (match: Match): Promise<ReplayData | null> => {
+    if (!match.name) return null;
+
+    const matchKey = match.name;
+
+    // Check if already cached
+    if (replayDataCache.has(matchKey)) {
+      return replayDataCache.get(matchKey)!;
+    }
+
+    // Check if already loading
+    if (loadingReplayData.has(matchKey)) {
+      return null;
+    }
+
+    loadingReplayData.add(matchKey);
+    // Force reactivity update for loading state
+    loadingReplayData = new Set(loadingReplayData);
+
+    try {
+      const replays = await match.replays;
+      const replay = replays.anyReplay;
+
+      if (!replay) {
+        return null;
+      }
+
+      const gameId = encodeURIComponent(match.name);
+      const replayUrl = encodeURIComponent(replay.url);
+      const url = `https://repser.cwal.gg/replay/${gameId}?url=${replayUrl}`;
+
+      const response = await tauriFetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const replayData: ReplayData = await response.json();
+      replayDataCache.set(matchKey, replayData);
+      // Force reactivity update for cache
+      replayDataCache = new Map(replayDataCache);
+      return replayData;
+    } catch (error) {
+      console.error("Failed to fetch replay data:", error);
+      return null;
+    } finally {
+      loadingReplayData.delete(matchKey);
+      // Force reactivity update for loading state
+      loadingReplayData = new Set(loadingReplayData);
+    }
+  };
+
+  const showChatMessages = (chatMessages: ChatMessage[]) => {
+    selectedChatMessages = chatMessages;
+    showChatDialog = true;
+  };
+
   const fetchUntilScrollbarOrEnd = async () => {
     let shouldContinue = true;
     while (shouldContinue) {
-      const fetchedMatches = await fetchMoreMatches();
-      if (!fetchedMatches) {
-        // No more matches available
-        break;
-      }
+      try {
+        const fetchedMatches = await fetchMoreMatches();
+        if (!fetchedMatches) {
+          // No more matches available
+          break;
+        }
 
-      // Give DOM time to update
-      await sleep(100);
+        // Give DOM time to update
+        await sleep(100);
 
-      if (hasScrollbar()) {
-        // We now have enough content to scroll
+        if (hasScrollbar()) {
+          // We now have enough content to scroll
+          break;
+        }
+      } catch (error) {
+        console.error("Error in fetchUntilScrollbarOrEnd:", error);
+        // Break the loop on error to prevent infinite retry
         break;
       }
     }
@@ -182,16 +306,49 @@
 
   afterNavigate(async () => {
     matches = [];
-    const _gb = await gb;
-    profile = await _gb.minimalAccountWithGamesPlayedLastWeek(id, {
-      gateway: Number.parseInt(gateway),
-    });
-    const leaderboard = await _gb.leaderboard({
-      seasonId: profile.currentSeason,
-    });
-    ranking = (await profile.requestedProfile?.ranking(leaderboard.id)) ?? null;
-    matchesGenerator = (await profile.requestedProfile?.ladderGames()) ?? null;
-    await fetchUntilScrollbarOrEnd();
+    replayDataCache.clear();
+    loadingReplayData.clear();
+
+    try {
+      const _gb = await gb;
+      profile = await _gb.minimalAccountWithGamesPlayedLastWeek(id, {
+        gateway: Number.parseInt(gateway),
+      });
+      const leaderboard = await _gb.leaderboard({
+        seasonId: profile.currentSeason,
+      });
+      ranking =
+        (await profile.requestedProfile?.ranking(leaderboard.id)) ?? null;
+      matchesGenerator =
+        (await profile.requestedProfile?.ladderGames()) ?? null;
+
+      // Try to fetch initial matches
+      try {
+        await fetchUntilScrollbarOrEnd();
+      } catch (matchError) {
+        console.error("Failed to load initial matches:", matchError);
+        // If we can't load any matches at all, redirect to error page
+        goto(`/error?from=${encodeURIComponent($page.url.pathname)}`);
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to load player data:", error);
+      // Redirect to error page with current URL context
+      goto(`/error?from=${encodeURIComponent($page.url.pathname)}`);
+    }
+  });
+
+  // Fetch replay data for newly loaded matches
+  $effect(() => {
+    for (const match of matches) {
+      if (
+        match.name &&
+        !replayDataCache.has(match.name) &&
+        !loadingReplayData.has(match.name)
+      ) {
+        fetchReplayData(match);
+      }
+    }
   });
 </script>
 
@@ -315,9 +472,11 @@
                   <Table.Head>Map</Table.Head>
                   <Table.Head>Matchup</Table.Head>
                   <Table.Head>Opponent</Table.Head>
-                  <Table.Head class="text-center">Result</Table.Head>
-                  <Table.Head class="text-right">MMR</Table.Head>
-                  <Table.Head class="text-right"></Table.Head>
+                  <Table.Head>Result</Table.Head>
+                  <Table.Head>Duration</Table.Head>
+                  <Table.Head>MMR</Table.Head>
+                  <Table.Head></Table.Head>
+                  <Table.Head></Table.Head>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
@@ -338,21 +497,29 @@
                               </p>
                             </Tooltip.Content>
                           </Tooltip.Root>
-                        {:else}
-                          <div class="flex items-center gap-2">
+                        {:else if match.name && replayDataCache.has(match.name)}
+                          {@const replayData = replayDataCache.get(match.name)}
+                          {#if replayData?.timestamp}
+                            {@const replayDate = new Date(replayData.timestamp)}
                             <Tooltip.Root>
                               <Tooltip.Trigger
-                                class="w-4 h-4 rounded-full border border-muted-foreground/50 text-muted-foreground/70 hover:text-muted-foreground hover:border-muted-foreground text-xs flex items-center justify-center cursor-help"
+                                class="cursor-help underline decoration-dotted decoration-muted-foreground/40 hover:decoration-muted-foreground/60"
                               >
-                                ?
+                                {replayDate.toLocaleDateString()}
                               </Tooltip.Trigger>
                               <Tooltip.Content>
                                 <p class="text-sm">
-                                  API returned corrupt timestamp for this match
+                                  {replayDate.toLocaleString()}
                                 </p>
                               </Tooltip.Content>
                             </Tooltip.Root>
-                          </div>
+                          {:else}
+                            <span class="text-muted-foreground text-sm">—</span>
+                          {/if}
+                        {:else if match.name && loadingReplayData.has(match.name)}
+                          <Skeleton class="h-4 w-20" />
+                        {:else}
+                          <span class="text-muted-foreground text-sm">—</span>
                         {/if}
                       </Table.Cell>
                       <Table.Cell>
@@ -414,6 +581,22 @@
                           {getResultDisplay(matchResult)}
                         </span>
                       </Table.Cell>
+                      <Table.Cell class="text-center">
+                        {#if match.name && replayDataCache.has(match.name)}
+                          {@const replayData = replayDataCache.get(match.name)}
+                          {#if replayData}
+                            <span class="text-sm">
+                              {formatDuration(
+                                replayData.parsed_data.game_duration_ms,
+                              )}
+                            </span>
+                          {/if}
+                        {:else if match.name && loadingReplayData.has(match.name)}
+                          <Skeleton class="h-4 w-12 mx-auto" />
+                        {:else}
+                          <span class="text-muted-foreground text-sm">—</span>
+                        {/if}
+                      </Table.Cell>
                       <Table.Cell class="text-right">
                         {#if match.thisPlayer?.profileInfo?.points?.delta !== undefined}
                           <span
@@ -428,6 +611,32 @@
                               ? "+"
                               : ""}{match.thisPlayer.profileInfo.points.delta}
                           </span>
+                        {:else}
+                          <span class="text-muted-foreground text-sm">—</span>
+                        {/if}
+                      </Table.Cell>
+                      <Table.Cell class="text-center">
+                        {#if match.name && replayDataCache.has(match.name)}
+                          {@const replayData = replayDataCache.get(match.name)}
+                          {#if replayData && replayData.parsed_data.chat_messages.length > 0}
+                            <Button
+                              onclick={() =>
+                                showChatMessages(
+                                  replayData.parsed_data.chat_messages,
+                                )}
+                              size="sm"
+                              variant="outline"
+                              class="h-7 px-2 text-xs"
+                            >
+                              Chat
+                            </Button>
+                          {:else if replayData}
+                            <span class="text-muted-foreground text-xs"
+                              >No chat</span
+                            >
+                          {/if}
+                        {:else if match.name && loadingReplayData.has(match.name)}
+                          <Skeleton class="h-7 w-12 mx-auto" />
                         {:else}
                           <span class="text-muted-foreground text-sm">—</span>
                         {/if}
@@ -451,7 +660,7 @@
                 {:else if profile && ranking}
                   <Table.Row>
                     <Table.Cell
-                      colspan={7}
+                      colspan={9}
                       class="text-center py-8 text-muted-foreground"
                     >
                       No matches found for this player
@@ -479,8 +688,14 @@
                       <Table.Cell class="text-center">
                         <Skeleton class="h-6 w-16 mx-auto" />
                       </Table.Cell>
+                      <Table.Cell class="text-center">
+                        <Skeleton class="h-4 w-12 mx-auto" />
+                      </Table.Cell>
                       <Table.Cell class="text-right">
                         <Skeleton class="h-4 w-8 ml-auto" />
+                      </Table.Cell>
+                      <Table.Cell class="text-center">
+                        <Skeleton class="h-7 w-12 mx-auto" />
                       </Table.Cell>
                       <Table.Cell class="text-right">
                         <Skeleton class="h-6 w-20 ml-auto" />
@@ -496,3 +711,41 @@
     </div>
   </div>
 {/key}
+
+<!-- Chat Messages Dialog -->
+<Dialog.Root bind:open={showChatDialog}>
+  <Dialog.Content class="max-w-2xl max-h-[80vh] overflow-y-auto">
+    <Dialog.Header>
+      <Dialog.Title>Chat Messages</Dialog.Title>
+      <Dialog.Description>
+        In-game chat messages from this match
+      </Dialog.Description>
+    </Dialog.Header>
+    <div class="space-y-3 mt-4">
+      {#if selectedChatMessages.length > 0}
+        {#each selectedChatMessages as message}
+          <div class="border-l-2 border-primary/20 pl-3 py-2">
+            <div
+              class="flex items-center gap-2 text-sm text-muted-foreground mb-1"
+            >
+              <span class="font-medium text-foreground">{message.player}</span>
+              <span>•</span>
+              <span
+                >{Math.floor(message.timestamp / 1000 / 60)}:{(
+                  Math.floor(message.timestamp / 1000) % 60
+                )
+                  .toString()
+                  .padStart(2, "0")}</span
+              >
+            </div>
+            <p class="text-sm">{message.message}</p>
+          </div>
+        {/each}
+      {:else}
+        <p class="text-center text-muted-foreground py-8">
+          No chat messages in this match
+        </p>
+      {/if}
+    </div>
+  </Dialog.Content>
+</Dialog.Root>

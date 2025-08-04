@@ -18,6 +18,9 @@
           "url": "http://localhost:*/web-api/*"
         },
         {
+          "url": "https://repser.cwal.gg/replay/*"
+        },
+        {
           "url": "https://storage.googleapis.com/starcraft-user-uploads-prod/*"
         }
       ]

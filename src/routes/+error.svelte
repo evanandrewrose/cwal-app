@@ -7,6 +7,14 @@
   const goHome = () => {
     goto("/search");
   };
+
+  const goBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      goto("/search");
+    }
+  };
 </script>
 
 <svelte:head>
@@ -41,6 +49,9 @@
     </div>
 
     <div class="flex flex-col sm:flex-row gap-3 justify-center">
+      <Button onclick={goBack} variant="outline" class="min-w-[120px] cursor-pointer">
+        Go Back
+      </Button>
       <Button onclick={goHome} class="min-w-[120px] cursor-pointer">
         Search Players
       </Button>

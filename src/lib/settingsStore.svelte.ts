@@ -1,20 +1,21 @@
 import { invoke } from '@tauri-apps/api/core';
 import { appDataDir, homeDir } from '@tauri-apps/api/path';
+import { toast } from 'svelte-sonner';
 
 export interface AppSettings {
     replayDownloadPath: string;
     mapDownloadPath: string;
+    hideShortReplays: boolean;
 }
 
 class SettingsStore {
     private _settings = $state<AppSettings>({
         replayDownloadPath: '',
-        mapDownloadPath: ''
+        mapDownloadPath: '',
+        hideShortReplays: true
     });
 
     private _initialized = $state(false);
-    private _savingReplayPath = $state(false);
-    private _savingMapPath = $state(false);
     private settingsFilePath: string = '';
 
     constructor() {
@@ -27,14 +28,6 @@ class SettingsStore {
 
     get initialized(): boolean {
         return this._initialized;
-    }
-
-    get savingReplayPath(): boolean {
-        return this._savingReplayPath;
-    }
-
-    get savingMapPath(): boolean {
-        return this._savingMapPath;
     }
 
     private initialize = async () => {
@@ -81,34 +74,49 @@ class SettingsStore {
             const home = await homeDir();
             return {
                 replayDownloadPath: `${home}\\Documents\\StarCraft\\Maps\\Replays\\CWAL`,
-                mapDownloadPath: `${home}\\Documents\\StarCraft\\Maps\\CWAL`
+                mapDownloadPath: `${home}\\Documents\\StarCraft\\Maps\\CWAL`,
+                hideShortReplays: true
             };
         } catch (error) {
             console.error('Failed to get home directory:', error);
             return {
                 replayDownloadPath: 'C:\\Users\\Documents\\StarCraft\\Maps\\Replays\\CWAL',
-                mapDownloadPath: 'C:\\Users\\Documents\\StarCraft\\Maps\\CWAL'
+                mapDownloadPath: 'C:\\Users\\Documents\\StarCraft\\Maps\\CWAL',
+                hideShortReplays: true
             };
         }
     }
 
     updateReplayPath = async (path: string) => {
-        this._savingReplayPath = true;
         try {
             this._settings.replayDownloadPath = path;
             await this.saveSettings();
-        } finally {
-            this._savingReplayPath = false;
+            toast.success('Replay download path updated');
+        } catch (error) {
+            console.error('Failed to update replay path:', error);
+            toast.error('Failed to update replay download path');
         }
     }
 
     updateMapPath = async (path: string) => {
-        this._savingMapPath = true;
         try {
             this._settings.mapDownloadPath = path;
             await this.saveSettings();
-        } finally {
-            this._savingMapPath = false;
+            toast.success('Map download path updated');
+        } catch (error) {
+            console.error('Failed to update map path:', error);
+            toast.error('Failed to update map download path');
+        }
+    }
+
+    updateHideShortReplays = async (hideShortReplays: boolean) => {
+        try {
+            this._settings.hideShortReplays = hideShortReplays;
+            await this.saveSettings();
+            toast.success('Replay preferences updated');
+        } catch (error) {
+            console.error('Failed to update replay preferences:', error);
+            toast.error('Failed to update replay preferences');
         }
     }
 
@@ -130,7 +138,13 @@ class SettingsStore {
     }
 
     resetToDefaults = async () => {
-        await this.setDefaults();
+        try {
+            await this.setDefaults();
+            toast.success('Settings reset to defaults');
+        } catch (error) {
+            console.error('Failed to reset settings:', error);
+            toast.error('Failed to reset settings');
+        }
     }
 
     getResolvedDefaults = async (): Promise<AppSettings> => {
