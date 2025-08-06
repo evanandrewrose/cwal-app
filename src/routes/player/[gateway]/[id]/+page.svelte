@@ -34,11 +34,18 @@
   let matches: Match[] = $state([]);
   let scrollableDiv: HTMLDivElement | null = $state(null);
   let loadingMatches = $state(false);
+  let scrollTimeout: number | null = null;
 
   const fetchMoreMatches = async () => {
     if (!matchesGenerator) {
       return false;
     }
+
+    if (loadingMatches) {
+      return false;
+    }
+
+    loadingMatches = true;
     let fetchedAny = false;
     try {
       for (let i = 0; i < MATCH_FETCH_NUM; ++i) {
@@ -65,6 +72,8 @@
         // Log error for background loading when we already have some matches
         console.error("Failed to load more matches:", error);
       }
+    } finally {
+      loadingMatches = false;
     }
     return fetchedAny;
   };
@@ -75,12 +84,26 @@
   };
 
   const fetchUntilScrollbarOrEnd = async () => {
-    let shouldContinue = true;
-    while (shouldContinue) {
+    const maxIterations = 50; // Prevent infinite loops
+    const maxTimeMs = 30000; // 30 second timeout
+    const startTime = Date.now();
+
+    let iterations = 0;
+
+    while (iterations < maxIterations) {
+      // Check timeout
+      if (Date.now() - startTime > maxTimeMs) {
+        console.warn(
+          "fetchUntilScrollbarOrEnd timed out after",
+          maxTimeMs,
+          "ms",
+        );
+        break;
+      }
+
       try {
         const fetchedMatches = await fetchMoreMatches();
         if (!fetchedMatches) {
-          // No more matches available
           break;
         }
 
@@ -88,7 +111,6 @@
         await sleep(100);
 
         if (hasScrollbar()) {
-          // We now have enough content to scroll
           break;
         }
       } catch (error) {
@@ -96,6 +118,15 @@
         // Break the loop on error to prevent infinite retry
         break;
       }
+
+      iterations++;
+    }
+
+    if (iterations >= maxIterations) {
+      console.warn(
+        "fetchUntilScrollbarOrEnd reached maximum iterations:",
+        maxIterations,
+      );
     }
   };
 
@@ -104,12 +135,21 @@
       return;
     }
 
-    const { scrollHeight, scrollTop, clientHeight } = scrollableDiv;
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-
-    if (distanceFromBottom <= 200) {
-      fetchMoreMatches();
+    // Debounce scroll events to prevent excessive calls
+    if (scrollTimeout) {
+      clearTimeout(scrollTimeout);
     }
+
+    scrollTimeout = setTimeout(() => {
+      if (!scrollableDiv) return;
+
+      const { scrollHeight, scrollTop, clientHeight } = scrollableDiv;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+      if (distanceFromBottom <= 200 && !loadingMatches) {
+        fetchMoreMatches();
+      }
+    }, 100); // 100ms debounce
   };
 
   afterNavigate(async () => {
