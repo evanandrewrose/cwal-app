@@ -17,7 +17,7 @@
   });
 </script>
 
-<ModeWatcher />
+<ModeWatcher defaultMode="dark" track={false} />
 
 <svelte:head>
   <title>CWAL Desktop App</title>
