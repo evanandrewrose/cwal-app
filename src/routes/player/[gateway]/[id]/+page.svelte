@@ -9,7 +9,9 @@
   import Rank from "@/lib/components/icons/rank.svelte";
   import * as Avatar from "@/lib/components/ui/avatar";
   import { Skeleton } from "@/lib/components/ui/skeleton";
+  import { Switch } from "@/lib/components/ui/switch";
   import { getGb, sleep } from "@/lib/scApi.svelte";
+  import { getSettingsStore } from "@/lib/settingsStore.svelte";
   import { avatarOrDefault } from "@/lib/utils";
 
   import type { PageProps } from "./$types";
@@ -22,6 +24,7 @@
   const MATCH_FETCH_NUM = 15;
 
   const gb = getGb();
+  const settingsStore = getSettingsStore();
 
   let profile: Awaited<
     ReturnType<
@@ -35,6 +38,25 @@
   let scrollableDiv: HTMLDivElement | null = $state(null);
   let loadingMatches = $state(false);
   let scrollTimeout: number | null = null;
+  let hideShortMatches = $state(false);
+
+  // Sync with settings store
+  $effect(() => {
+    if (settingsStore.initialized) {
+      hideShortMatches = settingsStore.settings.hideShortReplays;
+    }
+  });
+
+  // Update settings when changed
+  $effect(() => {
+    if (
+      settingsStore.initialized &&
+      hideShortMatches !== settingsStore.settings.hideShortReplays
+    ) {
+      settingsStore.updateHideShortReplays(hideShortMatches);
+    }
+  });
+
 
   const fetchMoreMatches = async () => {
     if (!matchesGenerator) {
@@ -294,7 +316,23 @@
         {/if}
       </div>
 
-      <MatchesTable {matches} loading={!profile || !ranking} />
+      <div class="flex items-center justify-between bg-muted/20 rounded-lg p-4">
+        <div class="space-y-1">
+          <label class="text-sm font-medium" for="hide-short-matches">
+            Hide short matches
+          </label>
+          <p class="text-xs text-muted-foreground">
+            Hide matches shorter than 1 minute from the list
+          </p>
+        </div>
+        <Switch
+          id="hide-short-matches"
+          bind:checked={hideShortMatches}
+          class="cursor-pointer"
+        />
+      </div>
+
+      <MatchesTable {matches} {hideShortMatches} loading={!profile || !ranking} />
     </div>
   </div>
 {/key}
