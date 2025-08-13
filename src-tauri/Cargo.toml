@@ -26,4 +26,6 @@ serde_json = "1"
 netstat = "0.7.0"
 sysinfo = "0.36.0"
 tauri-plugin-http = "2"
+nom = "8.0.0"
+flate2 = "1.1.2"
 

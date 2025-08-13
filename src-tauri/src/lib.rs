@@ -1,12 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::Emitter;
+mod replay_parser;
 mod scr_events;
 mod scr_process;
 
-use std::sync::{atomic::AtomicBool, Arc, Mutex};
 use std::fs;
 use std::path::Path;
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 
 use scr_events::ScrProcessEventProvider;
 use tauri::Window;
@@ -60,12 +61,16 @@ fn write_settings_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn download_file(url: String, destination_path: String, filename: String) -> Result<String, String> {
+async fn download_file(
+    url: String,
+    destination_path: String,
+    filename: String,
+) -> Result<String, String> {
     use std::io::Write;
     use tauri_plugin_http::reqwest;
-    
+
     let full_path = Path::new(&destination_path).join(&filename);
-    
+
     if let Some(parent) = full_path.parent() {
         if let Err(e) = fs::create_dir_all(parent) {
             return Err(format!("Failed to create directory: {}", e));
@@ -73,18 +78,26 @@ async fn download_file(url: String, destination_path: String, filename: String) 
     }
 
     let client = reqwest::Client::new();
-    let response = client.get(&url).send().await
+    let response = client
+        .get(&url)
+        .send()
+        .await
         .map_err(|e| format!("Failed to download file: {}", e))?;
 
     if !response.status().is_success() {
-        return Err(format!("Download failed with status: {}", response.status()));
+        return Err(format!(
+            "Download failed with status: {}",
+            response.status()
+        ));
     }
 
-    let bytes = response.bytes().await
+    let bytes = response
+        .bytes()
+        .await
         .map_err(|e| format!("Failed to read response: {}", e))?;
 
-    let mut file = fs::File::create(&full_path)
-        .map_err(|e| format!("Failed to create file: {}", e))?;
+    let mut file =
+        fs::File::create(&full_path).map_err(|e| format!("Failed to create file: {}", e))?;
 
     file.write_all(&bytes)
         .map_err(|e| format!("Failed to write file: {}", e))?;
