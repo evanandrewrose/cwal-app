@@ -8,68 +8,51 @@ export interface AppSettings {
     hideShortReplays: boolean;
 }
 
-class SettingsStore {
-    private _settings = $state<AppSettings>({
-        replayDownloadPath: '',
-        mapDownloadPath: '',
-        hideShortReplays: true
-    });
+export class SettingsStore {
+    private constructor(
+        private _settings: AppSettings
+    ) { }
 
-    private _initialized = $state(false);
-    private settingsFilePath: string = '';
-
-    constructor() {
-        this.initialize();
+    static create = async () => {
+        const settings = await SettingsStore.loadSettings();
+        const store = new SettingsStore(
+            settings
+        );
+        return store;
     }
 
     get settings(): AppSettings {
         return this._settings;
     }
 
-    get initialized(): boolean {
-        return this._initialized;
+    static async getSettingsFilePath(): Promise<string> {
+        const dataDir = await appDataDir();
+        return `${dataDir}\\settings.json`;
     }
 
-    private initialize = async () => {
-        try {
-            const appData = await appDataDir();
-            this.settingsFilePath = `${appData}settings.json`;
+    private static loadSettings = async (): Promise<AppSettings> => {
+        const defaults = await SettingsStore.getDefaultSettings();
 
-            await this.loadSettings();
-            this._initialized = true;
-        } catch (error) {
-            console.error('Failed to initialize settings store:', error);
-            await this.setDefaults();
-            this._initialized = true;
-        }
-    }
-
-    private loadSettings = async () => {
         try {
             const content = await invoke<string>('read_settings_file', {
-                path: this.settingsFilePath
+                path: await this.getSettingsFilePath()
             });
 
             if (content) {
                 const savedSettings = JSON.parse(content) as Partial<AppSettings>;
 
-                const defaults = await this.getDefaultSettings();
-                this._settings = { ...defaults, ...savedSettings };
+                return { ...defaults, ...savedSettings };
             } else {
-                await this.setDefaults();
+                return defaults;
             }
         } catch (error) {
             console.error('Failed to load settings:', error);
-            await this.setDefaults();
         }
+
+        return defaults;
     }
 
-    private setDefaults = async () => {
-        this._settings = await this.getDefaultSettings();
-        await this.saveSettings();
-    }
-
-    private getDefaultSettings = async (): Promise<AppSettings> => {
+    static getDefaultSettings = async (): Promise<AppSettings> => {
         try {
             const home = await homeDir();
             return {
@@ -120,16 +103,11 @@ class SettingsStore {
         }
     }
 
-    updateSettings = async (newSettings: Partial<AppSettings>) => {
-        this._settings = { ...this._settings, ...newSettings };
-        await this.saveSettings();
-    }
-
     private saveSettings = async () => {
         try {
             const content = JSON.stringify(this._settings, null, 2);
             await invoke('write_settings_file', {
-                path: this.settingsFilePath,
+                path: await SettingsStore.getSettingsFilePath(),
                 content
             });
         } catch (error) {
@@ -139,24 +117,21 @@ class SettingsStore {
 
     resetToDefaults = async () => {
         try {
-            await this.setDefaults();
+            this._settings = await SettingsStore.getDefaultSettings();
+            await this.saveSettings();
             toast.success('Settings reset to defaults');
         } catch (error) {
             console.error('Failed to reset settings:', error);
             toast.error('Failed to reset settings');
         }
     }
-
-    getResolvedDefaults = async (): Promise<AppSettings> => {
-        return await this.getDefaultSettings();
-    }
 }
 
 let settingsStore: SettingsStore;
 
-export const getSettingsStore = (): SettingsStore => {
+export const getSettingsStore = async (): Promise<SettingsStore> => {
     if (!settingsStore) {
-        settingsStore = new SettingsStore();
+        settingsStore = await SettingsStore.create();
     }
     return settingsStore;
 }

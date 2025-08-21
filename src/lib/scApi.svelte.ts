@@ -55,7 +55,10 @@ export class TauriConnection implements IBroodWarConnection {
             }
 
             // On success, cache if allowed (no TTL; evicts by LRU max)
-            if (shouldCache) fetchCache.set(key, text);
+            if (shouldCache) {
+                fetchCache.set(key, text);
+            }
+
             return text;
         }
 

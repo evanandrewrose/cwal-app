@@ -49,7 +49,7 @@
     downloadingMaps = new Set(downloadingMaps);
 
     try {
-      const seasonDirectory = `${settingsStore.settings.mapDownloadPath}\\Season ${map.seasonId}`;
+      const seasonDirectory = `${settingsStore.getSettings.mapDownloadPath}\\Season ${map.seasonId}`;
       const result = await invoke<string>("download_file", {
         url: map.url,
         destinationPath: seasonDirectory,

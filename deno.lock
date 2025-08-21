@@ -17,6 +17,7 @@
     "npm:bw-web-api@^3.0.2": "3.0.2",
     "npm:clsx@^2.1.1": "2.1.1",
     "npm:gravatic-booster@^3.1.0": "3.1.0",
+    "npm:javascript-time-ago@^2.5.11": "2.5.11",
     "npm:lru-cache@^11.1.0": "11.1.0",
     "npm:mode-watcher@^1.1.0": "1.1.0_svelte@5.35.2__acorn@8.15.0",
     "npm:prettier-plugin-svelte@^3.4.0": "3.4.0_prettier@3.6.2_svelte@5.35.2__acorn@8.15.0",
@@ -855,6 +856,12 @@
     "javascript-natural-sort@0.7.1": {
       "integrity": "sha512-nO6jcEfZWQXDhOiBtG2KvKyEptz7RVbpGP4vTD2hLBdmNQSsCiicO2Ioinv6UI4y9ukqnBpy+XZ9H6uLNgJTlw=="
     },
+    "javascript-time-ago@2.5.11": {
+      "integrity": "sha512-Zeyf5R7oM1fSMW9zsU3YgAYwE0bimEeF54Udn2ixGd8PUwu+z1Yc5t4Y8YScJDMHD6uCx6giLt3VJR5K4CMwbg==",
+      "dependencies": [
+        "relative-time-format"
+      ]
+    },
     "jiti@2.4.2": {
       "integrity": "sha512-rg9zJN+G4n2nfJl5MW3BMygZX56zKPNVEYYqq7adpmMh4Jn2QNEwhvQlFy6jPVdcod7txZtKHWnyZiA3a0zP7A==",
       "bin": true
@@ -1016,6 +1023,9 @@
     },
     "readdirp@4.1.2": {
       "integrity": "sha512-GDhwkLfywWL2s6vEjyhri+eXmfH6j1L7JE27WhqLeYzoh/A3DBaYGEj2H/HFZCn/kMfim73FXxEJTw06WtxQwg=="
+    },
+    "relative-time-format@1.1.6": {
+      "integrity": "sha512-aCv3juQw4hT1/P/OrVltKWLlp15eW1GRcwP1XdxHrPdZE9MtgqFpegjnTjLhi2m2WI9MT/hQQtE+tjEWG1hgkQ=="
     },
     "rollup@4.44.2": {
       "integrity": "sha512-PVoapzTwSEcelaWGth3uR66u7ZRo6qhPHc0f2uRO9fX6XDVNrIiGYS0Pj9+R8yIIYSD/mCx2b16Ws9itljKSPg==",
@@ -1270,6 +1280,7 @@
         "npm:bw-web-api@^3.0.2",
         "npm:clsx@^2.1.1",
         "npm:gravatic-booster@^3.1.0",
+        "npm:javascript-time-ago@^2.5.11",
         "npm:lru-cache@^11.1.0",
         "npm:mode-watcher@^1.1.0",
         "npm:prettier-plugin-svelte@^3.4.0",

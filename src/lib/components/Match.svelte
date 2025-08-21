@@ -3,6 +3,8 @@
 
   import { invoke } from "@tauri-apps/api/core";
   import type { Match } from "gravatic-booster";
+  import TimeAgo from "javascript-time-ago";
+  import en from "javascript-time-ago/locale/en.json";
   import { toast } from "svelte-sonner";
 
   import MapName from "@/lib/components/MapName.svelte";
@@ -45,6 +47,8 @@
   );
   const settingsStore = getSettingsStore();
   let isDownloading = $state(false);
+
+  let timeAgo: TimeAgo | null = null;
 
   const formatDuration = (durationMs: number): string => {
     const totalSeconds = Math.floor(durationMs / 1000);
@@ -95,7 +99,7 @@
       const replayDownloadName = generateReplayFilename();
       const result = await invoke<string>("download_file", {
         url: replay.url,
-        destinationPath: settingsStore.settings.replayDownloadPath,
+        destinationPath: settingsStore.getSettings.replayDownloadPath,
         filename: replayDownloadName,
       });
       toast.success("Replay downloaded successfully", {
@@ -124,7 +128,7 @@
       }
 
       const destinationPath = settingsStore.initialized
-        ? settingsStore.settings.replayDownloadPath
+        ? settingsStore.getSettings.replayDownloadPath
         : ""; // empty falls back to working dir; can be improved
 
       const sanitizeFilename = (filename: string) =>
@@ -144,7 +148,6 @@
       };
 
       interface DownloadAndParseReplayResponse {
-        saved_path: string;
         duration_ms: number;
         start_time_ms: number;
         chat_messages: Array<{
@@ -188,22 +191,43 @@
     }
   };
 
+  let exactDate: Date | null = $derived.by(() => {
+    if (match.timestamp) return match.timestamp;
+    if (internalReplayData?.timestamp)
+      return new Date(internalReplayData.timestamp);
+    return null;
+  });
+
+  let relativeTime = $derived.by(() => {
+    if (!exactDate || !timeAgo) return null;
+    return timeAgo.format(exactDate);
+  });
+
   onMount(() => {
     maybeParseReplay();
+    try {
+      // Adding locale is idempotent; ignore if already added
+      TimeAgo.addDefaultLocale(en as any);
+    } catch {}
+    try {
+      const lang =
+        typeof navigator !== "undefined" ? navigator.language : "en-US";
+      timeAgo = new TimeAgo(lang);
+    } catch {}
   });
 </script>
 
 <tr class="hover:bg-muted/50">
   <td class="font-medium">
-    {#if match.timestamp}
+    {#if exactDate && relativeTime}
       <Tooltip.Root>
-        <Tooltip.Trigger
-          class="cursor-help underline decoration-dotted decoration-muted-foreground/40 hover:decoration-muted-foreground/60"
-        >
-          {match.timestamp.toLocaleDateString()}
+        <Tooltip.Trigger class="text-foreground">
+          {relativeTime}
         </Tooltip.Trigger>
         <Tooltip.Content>
-          <p class="text-sm">{match.timestamp.toLocaleString()}</p>
+          <div class="text-sm">
+            {exactDate.toLocaleString()}
+          </div>
         </Tooltip.Content>
       </Tooltip.Root>
     {:else}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { afterNavigate, goto } from "$app/navigation";
-  import { page } from "$app/stores";
+  import { page } from "$app/state";
   import type { GravaticBooster, Match, Ranking } from "gravatic-booster";
 
   import CountryFlag from "@/lib/components/CountryFlag.svelte";
@@ -32,6 +32,7 @@
     >
   > | null = $state(null);
   let ranking: Ranking | null = $state(null);
+  let otherRankings: Ranking[] = $state([]);
   let avatar = $derived.by(() => avatarOrDefault(ranking?.avatar));
   let matchesGenerator: AsyncGenerator<Match, void, void> | null = null;
   let matches: Match[] = $state([]);
@@ -43,7 +44,7 @@
   // Sync with settings store
   $effect(() => {
     if (settingsStore.initialized) {
-      hideShortMatches = settingsStore.settings.hideShortReplays;
+      hideShortMatches = settingsStore.getSettings.hideShortReplays;
     }
   });
 
@@ -51,12 +52,11 @@
   $effect(() => {
     if (
       settingsStore.initialized &&
-      hideShortMatches !== settingsStore.settings.hideShortReplays
+      hideShortMatches !== settingsStore.getSettings.hideShortReplays
     ) {
       settingsStore.updateHideShortReplays(hideShortMatches);
     }
   });
-
 
   const fetchMoreMatches = async () => {
     if (!matchesGenerator) {
@@ -82,13 +82,13 @@
     } catch (error) {
       console.error("Failed to fetch more matches:", error);
 
-      // If we have no matches yet, this is likely a fundamental error (like EntityNotFoundError)
-      // so redirect to error page. If we already have some matches, just show a toast.
+      // Match count should never be zero, since they need 5 matches to appear
+      // searchable.
       if (matches.length === 0) {
         console.error(
           "Initial match loading failed, redirecting to error page",
         );
-        goto(`/error?from=${encodeURIComponent($page.url.pathname)}`);
+        goto(`/error?from=${encodeURIComponent(page.url.pathname)}`);
         return false;
       } else {
         // Log error for background loading when we already have some matches
@@ -187,6 +187,20 @@
       });
       ranking =
         (await profile.requestedProfile?.ranking(leaderboard.id)) ?? null;
+      // Fetch all rankings for this account and extract other profiles
+      try {
+        const acct = await profile.requestedProfile?.accountRankings(
+          leaderboard.id,
+        );
+        if (acct && acct.rankings) {
+          const reqGw = Number.parseInt(gateway);
+          otherRankings = acct.rankings.filter(
+            (r) => !(r.toon === id && Number(r.gatewayId) === reqGw),
+          );
+        }
+      } catch (e) {
+        console.warn("Failed to load other rankings", e);
+      }
       matchesGenerator =
         (await profile.requestedProfile?.ladderGames()) ?? null;
 
@@ -196,14 +210,25 @@
       } catch (matchError) {
         console.error("Failed to load initial matches:", matchError);
         // If we can't load any matches at all, redirect to error page
-        goto(`/error?from=${encodeURIComponent($page.url.pathname)}`);
+        goto(`/error?from=${encodeURIComponent(page.url.pathname)}`);
         return;
       }
     } catch (error) {
       console.error("Failed to load player data:", error);
       // Redirect to error page with current URL context
-      goto(`/error?from=${encodeURIComponent($page.url.pathname)}`);
+      goto(`/error?from=${encodeURIComponent(page.url.pathname)}`);
     }
+  });
+
+  const winPercentage = $derived.by(() => {
+    if (ranking?.wins !== undefined && ranking?.losses !== undefined) {
+      if (ranking.losses === 0) {
+        return "100%";
+      }
+      return `${Math.round((ranking.wins / (ranking.wins + ranking.losses)) * 100)}%`;
+    }
+
+    return "N/A";
   });
 </script>
 
@@ -214,7 +239,7 @@
 
 {#key id + gateway}
   <div
-    class="w-full h-[100vh] overflow-y-scroll scroll-smooth"
+    class="w-full h-[100vh] overflow-y-scroll scroll-smooth pb-8"
     onscroll={onScroll}
     bind:this={scrollableDiv}
   >
@@ -223,7 +248,11 @@
         <div class="flex items-start justify-between gap-6">
           <div class="flex items-start gap-6">
             <Avatar.Root class="w-20 h-20 flex-shrink-0 rounded-md">
-              <Avatar.Image src={avatar} alt="Player Avatar" class="rounded-md" />
+              <Avatar.Image
+                src={avatar}
+                alt="Player Avatar"
+                class="rounded-md"
+              />
               <Avatar.Fallback class="text-xl font-bold rounded-md"
                 >{id.slice(0, 2).toUpperCase()}</Avatar.Fallback
               >
@@ -284,9 +313,7 @@
 
             <div class="space-y-1">
               <div class="text-lg font-bold">
-                {ranking?.wins && ranking?.losses
-                  ? `${Math.round((ranking.wins / (ranking.wins + ranking.losses)) * 100)}%`
-                  : "N/A"}
+                {winPercentage}
               </div>
               <p class="text-xs text-muted-foreground">
                 Win Rate ({ranking?.wins || 0}W/{ranking?.losses || 0}L)
@@ -316,6 +343,53 @@
         {/if}
       </div>
 
+      <div class="bg-muted/20 rounded-lg p-4">
+        <h2 class="text-sm font-medium mb-1">Other profiles</h2>
+        {#if otherRankings.length > 0}
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {#each otherRankings as r}
+              <a
+                href="/player/{Number(r.gatewayId)}/{r.toon}"
+                class="flex items-center gap-3 p-3 rounded-md bg-background hover:bg-muted transition-colors"
+              >
+                <Avatar.Root class="w-8 h-8 rounded-md">
+                  <Avatar.Image
+                    src={avatarOrDefault(r.avatar)}
+                    alt={r.toon}
+                    class="rounded-md"
+                  />
+                </Avatar.Root>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-medium truncate max-w-[12rem]"
+                      >{r.toon}</span
+                    >
+                    {#if r.featureRace}
+                      <Race race={r.featureRace} />
+                    {/if}
+                  </div>
+                  <div
+                    class="text-xs text-muted-foreground flex items-center gap-2 mt-0.5"
+                  >
+                    {#if r.tier}
+                      <Rank rank={r.tier} />
+                    {/if}
+                    {#if r.rating}
+                      <span>{r.rating} MMR</span>
+                    {/if}
+                    <span>{r.gateway.name}</span>
+                  </div>
+                </div>
+              </a>
+            {/each}
+          </div>
+        {:else}
+          <p class="text-xs text-muted-foreground">
+            No other profiles on this account.
+          </p>
+        {/if}
+      </div>
+
       <div class="flex items-center justify-between bg-muted/20 rounded-lg p-4">
         <div class="space-y-1">
           <label class="text-sm font-medium" for="hide-short-matches">
@@ -332,7 +406,11 @@
         />
       </div>
 
-      <MatchesTable {matches} {hideShortMatches} loading={!profile || !ranking} />
+      <MatchesTable
+        {matches}
+        {hideShortMatches}
+        loading={!profile || !ranking}
+      />
     </div>
   </div>
 {/key}

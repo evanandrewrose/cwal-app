@@ -1,14 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::Emitter;
+mod cache;
 mod replay_parser;
 mod scr_events;
 mod scr_process;
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{atomic::AtomicBool, Arc, Mutex};
 
+use cache::ReplayCache;
 use replay_parser::ReplayParser;
 use scr_events::ScrProcessEventProvider;
 use tauri::path::BaseDirectory;
@@ -16,90 +18,7 @@ use tauri::Manager;
 use tauri::State;
 use tauri::Window;
 
-use lru::LruCache;
-use std::num::NonZeroUsize;
-
-struct ReplayCache {
-    dir: PathBuf,
-    lru: Mutex<LruCache<String, PathBuf>>, // key: url, value: cached filepath
-}
-
-impl ReplayCache {
-    fn new(dir: PathBuf, cap: usize) -> Self {
-        if let Err(e) = fs::create_dir_all(&dir) {
-            println!("[replay-cache] Failed to create cache dir {:?}: {}", dir, e);
-        }
-        Self {
-            dir,
-            lru: Mutex::new(LruCache::new(
-                NonZeroUsize::new(cap).unwrap_or(NonZeroUsize::new(1000).unwrap()),
-            )),
-        }
-    }
-
-    fn key(url: &str) -> String {
-        // Basic key; consider hashing if URLs are long
-        url.to_string()
-    }
-
-    fn get(&self, url: &str) -> Option<PathBuf> {
-        let key = Self::key(url);
-        let mut lru = self.lru.lock().ok()?;
-        let hit = lru.get(&key).cloned();
-        if let Some(p) = hit {
-            if p.exists() {
-                println!("[replay-cache] HIT for {} -> {}", url, p.display());
-                return Some(p.clone());
-            } else {
-                // stale entry
-                println!("[replay-cache] STALE entry for {} -> {}", url, p.display());
-                lru.pop(&key);
-            }
-        }
-        println!("[replay-cache] MISS for {}", url);
-        None
-    }
-
-    fn put(&self, url: &str, filename_hint: &str, bytes: &[u8]) -> Result<PathBuf, String> {
-        use std::io::Write;
-        let sanitized = filename_hint
-            .chars()
-            .map(|c| match c {
-                '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
-                _ => c,
-            })
-            .collect::<String>();
-        let path = self.dir.join(sanitized);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("Failed to create cache dir: {}", e))?;
-        }
-        let mut f =
-            fs::File::create(&path).map_err(|e| format!("Failed to create cache file: {}", e))?;
-        f.write_all(bytes)
-            .map_err(|e| format!("Failed to write cache file: {}", e))?;
-        let key = Self::key(url);
-        if let Ok(mut lru) = self.lru.lock() {
-            lru.put(key, path.clone());
-        }
-        Ok(path)
-    }
-}
-
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
-
-impl Drop for ReplayCache {
-    fn drop(&mut self) {
-        if let Ok(mut lru) = self.lru.lock() {
-            for (_k, p) in lru.iter() {
-                if p.exists() {
-                    let _ = fs::remove_file(p);
-                }
-            }
-            lru.clear();
-        }
-        println!("[replay-cache] Cache cleared on drop");
-    }
-}
 
 #[tauri::command]
 fn init_process(window: Window) {
@@ -208,7 +127,6 @@ struct ParsedChatMessage {
 
 #[derive(serde::Serialize)]
 struct DownloadAndParseReplayResponse {
-    saved_path: String,
     duration_ms: u32,
     start_time_ms: u64,
     chat_messages: Vec<ParsedChatMessage>,
@@ -246,18 +164,10 @@ fn parse_replay_bytes(bytes: &[u8]) -> Result<(u32, u64, Vec<ParsedChatMessage>)
 #[tauri::command]
 async fn download_and_parse_replay(
     url: String,
-    destination_path: String,
     filename: String,
     cache: State<'_, Arc<ReplayCache>>,
 ) -> Result<DownloadAndParseReplayResponse, String> {
     use tauri_plugin_http::reqwest;
-
-    let full_path = Path::new(&destination_path).join(&filename);
-    if let Some(parent) = full_path.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            return Err(format!("Failed to create directory: {}", e));
-        }
-    }
 
     // Acquire bytes from cache or network
     let bytes: Vec<u8> = if let Some(cached) = cache.get(&url) {
@@ -290,12 +200,8 @@ async fn download_and_parse_replay(
         vec
     };
 
-    // Save to destination for visibility/use
-    fs::write(&full_path, &bytes).map_err(|e| format!("Failed to write file: {}", e))?;
-
     let (duration_ms, start_time_ms, chat_messages) = parse_replay_bytes(&bytes)?;
     Ok(DownloadAndParseReplayResponse {
-        saved_path: full_path.to_string_lossy().to_string(),
         duration_ms,
         start_time_ms,
         chat_messages,
