@@ -1,11 +1,12 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { page } from "$app/stores";
+  import { page } from "$app/state";
+
   import { Button } from "@/lib/components/ui/button";
   import * as Card from "@/lib/components/ui/card";
 
   const goBack = () => {
-    const fromParam = $page.url.searchParams.get('from');
+    const fromParam = page.url.searchParams.get("from");
     if (fromParam) {
       // If we have a from parameter, try to go back to a safe page
       goto("/search");
@@ -21,7 +22,7 @@
   };
 
   const retryPage = () => {
-    const fromParam = $page.url.searchParams.get('from');
+    const fromParam = page.url.searchParams.get("from");
     if (fromParam) {
       goto(fromParam);
     } else {
@@ -47,17 +48,16 @@
     <Card.Content class="space-y-4">
       <div class="text-center space-y-2">
         <p class="text-sm text-muted-foreground">
-          This usually happens when there's an issue with the game data or StarCraft API.
+          This usually happens when there's an issue with the game data or
+          StarCraft API.
         </p>
         <p class="text-xs text-muted-foreground">
           The player might not exist or there could be a temporary server issue.
         </p>
       </div>
-      
+
       <div class="flex flex-col gap-2">
-        <Button onclick={retryPage} class="w-full">
-          Try Again
-        </Button>
+        <Button onclick={retryPage} class="w-full">Try Again</Button>
         <div class="flex gap-2">
           <Button onclick={goBack} variant="outline" class="flex-1">
             Go Back

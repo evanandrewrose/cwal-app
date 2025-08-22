@@ -12,7 +12,6 @@ export class TauriConnection implements IBroodWarConnection {
     constructor(private server: string) { }
 
     async fetch(path: BroodWarApiPath): Promise<string> {
-        // LRU cache for stable endpoints; skip volatile ones below
         const normalizedPath = path.startsWith('/') ? path : `/${path}`;
         const shouldCache = !NO_CACHE_PREFIXES.some((p) => normalizedPath.startsWith(p));
         const key = `${this.server}${normalizedPath}`;
@@ -23,11 +22,11 @@ export class TauriConnection implements IBroodWarConnection {
             }
         }
 
-        const max_attempts = 10;
+        const maxAttempts = 10;
         let timeout = 1000;
         let response: Response | null = null;
 
-        for (let i = 0; i < max_attempts; i++) {
+        for (let i = 0; i < maxAttempts; i++) {
             await sleep(timeout * i);
             try {
                 response = await tauriFetch(key, {
@@ -70,7 +69,6 @@ export class TauriConnection implements IBroodWarConnection {
     }
 }
 
-// Paths to avoid caching due to volatility
 const NO_CACHE_PREFIXES = [
     '/web-api/v2/aurora-profile-by-toon',
     '/web-api/v1/leaderboard',
@@ -78,7 +76,6 @@ const NO_CACHE_PREFIXES = [
     '/web-api/v1/matchmaker-player-stat-by-toon',
 ];
 
-// Module-level LRU cache with no TTL; items evicted by LRU when max is reached
 const fetchCache = new LRUCache<string, string>({ max: 200 });
 
 const createGB = async (port: number): Promise<GravaticBooster> =>

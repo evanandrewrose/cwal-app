@@ -1,18 +1,18 @@
 <script lang="ts">
   import "@/app.css";
-  
+
   import { ModeWatcher } from "mode-watcher";
   import { Toaster } from "svelte-sonner";
 
   import TitleBar from "@/lib/components/TitleBar.svelte";
   import AppSidebar from "@/lib/components/app-sidebar.svelte";
   import * as Sidebar from "@/lib/components/ui/sidebar";
-  import { configureReceiveTauriEvents } from "@/lib/scrState.svelte";
+  import { configureReceiveBackendEvents } from "@/lib/scrState.svelte";
 
   let { children } = $props();
 
   $effect.pre(() => {
-    const unlisten = configureReceiveTauriEvents();
+    const unlisten = configureReceiveBackendEvents();
     return async () => {
       (await unlisten)();
     };

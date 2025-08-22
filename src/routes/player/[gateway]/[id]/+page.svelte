@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
   import type { GravaticBooster, Match, Ranking } from "gravatic-booster";
@@ -12,7 +14,7 @@
   import { Switch } from "@/lib/components/ui/switch";
   import { getGb, sleep } from "@/lib/scApi.svelte";
   import { getSettingsStore } from "@/lib/settingsStore.svelte";
-  import { avatarOrDefault } from "@/lib/utils";
+  import { avatarOrDefault, debounce } from "@/lib/utils";
 
   import type { PageProps } from "./$types";
 
@@ -24,7 +26,7 @@
   const MATCH_FETCH_NUM = 15;
 
   const gb = getGb();
-  const settingsStore = getSettingsStore();
+  const settingsStorePromise = getSettingsStore();
 
   let profile: Awaited<
     ReturnType<
@@ -41,21 +43,28 @@
   let scrollTimeout: number | null = null;
   let hideShortMatches = $state(false);
 
-  // Sync with settings store
-  $effect(() => {
-    if (settingsStore.initialized) {
-      hideShortMatches = settingsStore.getSettings.hideShortReplays;
+  onMount(async () => {
+    try {
+      const store = await settingsStorePromise;
+      hideShortMatches = store.settings.hideShortReplays;
+    } catch (e) {
+      console.error("Failed to load settings for player page", e);
     }
   });
 
-  // Update settings when changed
-  $effect(() => {
-    if (
-      settingsStore.initialized &&
-      hideShortMatches !== settingsStore.getSettings.hideShortReplays
-    ) {
-      settingsStore.updateHideShortReplays(hideShortMatches);
+  const updateHideShortMatches = debounce(async (hide: boolean) => {
+    try {
+      const store = await settingsStorePromise;
+      if (hide !== hideShortMatches) {
+        store.updateHideShortReplays(hide);
+      }
+    } catch (e) {
+      console.error("Failed to update hideShortReplays setting", e);
     }
+  }, 500);
+
+  $effect(() => {
+    updateHideShortMatches(hideShortMatches);
   });
 
   const fetchMoreMatches = async () => {
@@ -349,7 +358,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {#each otherRankings as r}
               <a
-                href="/player/{Number(r.gatewayId)}/{r.toon}"
+                href="/player/{r.gatewayId}/{r.toon}"
                 class="flex items-center gap-3 p-3 rounded-md bg-background hover:bg-muted transition-colors"
               >
                 <Avatar.Root class="w-8 h-8 rounded-md">

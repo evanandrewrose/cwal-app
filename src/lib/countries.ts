@@ -1,7 +1,3 @@
-/**
- * Country code utilities for displaying flags and country names
- */
-
 export const getCountryFlag = (countryCode: string): string => {
     const flagMap: Record<string, string> = {
         USA: "🇺🇸",

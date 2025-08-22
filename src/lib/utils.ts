@@ -47,6 +47,7 @@ export function debounce<T extends (...args: any[]) => any>(
 export const jsonParseMap = (map: any) =>
 	JSON.stringify(mapToObject(map));
 
+// merge tailwind class names
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }

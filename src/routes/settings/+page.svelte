@@ -20,7 +20,7 @@
   } from "@/lib/settingsStore.svelte";
   import { debounce } from "@/lib/utils";
 
-  const settingsStore = getSettingsStore();
+  const settingsStorePromise = getSettingsStore();
 
   let replayPath = $state("");
   let mapPath = $state("");
@@ -28,15 +28,17 @@
   let resolvedDefaults = $state<AppSettings | null>(null);
 
   onMount(async () => {
-    const { settings } = await settingsStore;
+    const { settings } = await settingsStorePromise;
     replayPath = settings.replayDownloadPath;
     mapPath = settings.mapDownloadPath;
     resolvedDefaults = await SettingsStore.getDefaultSettings();
   });
 
   const setReplayDownloadPath = debounce(async (path: string) => {
-    replayPath = path;
-    (await settingsStore).updateReplayPath(path);
+    const settingsStore = await settingsStorePromise;
+    if (path !== settingsStore.settings.replayDownloadPath) {
+      settingsStore.updateReplayPath(path);
+    }
   }, 1000);
 
   $effect(() => {
@@ -44,8 +46,10 @@
   });
 
   const setMapDownloadPath = debounce(async (path: string) => {
-    mapPath = path;
-    (await settingsStore).updateMapPath(path);
+    const settingsStore = await settingsStorePromise;
+    if (path !== settingsStore.settings.mapDownloadPath) {
+      settingsStore.updateMapPath(path);
+    }
   }, 1000);
 
   $effect(() => {
@@ -53,7 +57,7 @@
   });
 
   const resetToDefaults = async () => {
-    const store = await settingsStore;
+    const store = await settingsStorePromise;
     await store.resetToDefaults();
     replayPath = store.settings.replayDownloadPath;
     mapPath = store.settings.mapDownloadPath;
@@ -207,18 +211,6 @@
               Default: Loading...
             {/if}
           </p>
-        </div>
-
-        <div class="pt-4 border-t">
-          <Button
-            onclick={resetToDefaults}
-            variant="outline"
-            size="sm"
-            class="cursor-pointer"
-          >
-            <RotateCcw class="size-3 mr-1" />
-            Reset All to Defaults
-          </Button>
         </div>
       </CardContent>
     </Card>

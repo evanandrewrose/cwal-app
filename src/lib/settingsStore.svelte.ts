@@ -114,17 +114,6 @@ export class SettingsStore {
             console.error('Failed to save settings:', error);
         }
     }
-
-    resetToDefaults = async () => {
-        try {
-            this._settings = await SettingsStore.getDefaultSettings();
-            await this.saveSettings();
-            toast.success('Settings reset to defaults');
-        } catch (error) {
-            console.error('Failed to reset settings:', error);
-            toast.error('Failed to reset settings');
-        }
-    }
 }
 
 let settingsStore: SettingsStore;
