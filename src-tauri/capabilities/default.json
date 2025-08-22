@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "opener:allow-open-path",
     "dialog:default",
     "core:window:default",
     "core:window:allow-close",
@@ -15,15 +16,9 @@
     {
       "identifier": "http:default",
       "allow": [
-        {
-          "url": "http://localhost:*/web-api/*"
-        },
-        {
-          "url": "https://repser.cwal.gg/replay/*"
-        },
-        {
-          "url": "https://storage.googleapis.com/starcraft-user-uploads-prod/*"
-        }
+        { "url": "http://localhost:*/web-api/*" },
+        { "url": "https://repser.cwal.gg/replay/*" },
+        { "url": "https://storage.googleapis.com/starcraft-user-uploads-prod/*" }
       ]
     },
     "http:default"

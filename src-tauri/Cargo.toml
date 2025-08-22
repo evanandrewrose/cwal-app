@@ -30,4 +30,5 @@ nom = "8.0.0"
 flate2 = "1.1.2"
 anyhow = "1"
 lru = "0.16.0"
+showfile = "0.1.1"
 

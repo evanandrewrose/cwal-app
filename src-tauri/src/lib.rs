@@ -232,8 +232,16 @@ pub fn run() {
             read_settings_file,
             write_settings_file,
             download_file,
-            download_and_parse_replay
+            download_and_parse_replay,
+            reveal_in_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn reveal_in_folder(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    showfile::show_path_in_file_manager(p);
+    Ok(())
 }

@@ -1,5 +1,7 @@
 <script lang="ts">
-  import type { Match } from "gravatic-booster";
+  import { onMount } from "svelte";
+
+  import type { GravaticBooster, Match } from "gravatic-booster";
 
   import MatchRow from "@/lib/components/Match.svelte";
   import * as Card from "@/lib/components/ui/card";
@@ -23,18 +25,75 @@
     timestamp: string; // ISO string
   }
 
+  type MinimalAccount = Awaited<
+    ReturnType<
+      typeof GravaticBooster.prototype.minimalAccountWithGamesPlayedLastWeek
+    >
+  >;
+
   interface Props {
-    matches: Match[];
+    matches?: Match[]; // deprecated; initial value only
+    profile?: MinimalAccount | null;
     loading?: boolean;
     hideShortMatches?: boolean;
-    onFetchReplayData?: (match: Match) => void; // retained for external override if needed
+    onFetchReplayData?: (match: Match) => void;
+    onFetcherReady?: (fetcher: () => Promise<boolean>) => void;
   }
 
-  let {
-    matches = [],
-    loading = false,
-    hideShortMatches = false,
-  }: Props = $props();
+  let { matches = [], profile = null, loading = false, hideShortMatches = false, onFetcherReady }: Props = $props();
+
+  // Internal reactive matches state
+  let internalMatches: Match[] = $state([...matches]);
+
+  const MATCH_FETCH_NUM = 15;
+  let matchesGenerator: AsyncGenerator<Match, void, void> | null = null;
+  let internalLoading = $state(false);
+  let lastProfileRef: MinimalAccount | null = null;
+
+  const ensureGenerator = async () => {
+    if (matchesGenerator || !profile?.requestedProfile) return;
+    try {
+      matchesGenerator = (await profile.requestedProfile?.ladderGames()) ?? null;
+    } catch (e) {
+      console.error("Failed to create matches generator", e);
+    }
+  };
+
+  $effect(() => {
+    if (profile !== lastProfileRef) {
+      internalMatches = [];
+      matchesGenerator = null;
+      lastProfileRef = profile;
+      void ensureGenerator();
+    }
+  });
+
+  const fetchMore = async (): Promise<boolean> => {
+    if (internalLoading) return false;
+    await ensureGenerator();
+    if (!matchesGenerator) return false;
+    internalLoading = true;
+    let fetchedAny = false;
+    try {
+      for (let i = 0; i < MATCH_FETCH_NUM; i++) {
+        const next = await matchesGenerator.next();
+        if (next.done) break;
+        internalMatches.push(next.value);
+        // force reactivity in case push doesn't trigger
+        internalMatches = internalMatches;
+        fetchedAny = true;
+      }
+    } catch (e) {
+      console.error("Match fetch failed (continuing):", e);
+    } finally {
+      internalLoading = false;
+    }
+    return fetchedAny;
+  };
+
+  onMount(() => {
+    onFetcherReady?.(fetchMore);
+  });
 
   let replayDataCache = $state(new Map<string, ReplayDataMinimal>());
   let selectedChatMessages: ChatMessage[] = $state([]);
@@ -42,15 +101,12 @@
 
   // Filter matches based on hideShortMatches setting (reacts when cache updates)
   let filteredMatches = $derived.by(() => {
-    if (!hideShortMatches) return matches;
-
-    return matches.filter((match) => {
-      // If we don't have replay data yet, include the match (it will be filtered later when data loads)
-      if (!match.name || !replayDataCache.has(match.name)) {
-        return true;
-      }
-
-      const replayData = replayDataCache.get(match.name);
+    const list = internalMatches;
+    if (!hideShortMatches) return list;
+    return list.filter((match) => {
+      const key = match.name || match.id;
+      if (!replayDataCache.has(key)) return true;
+      const replayData = replayDataCache.get(key);
       if (!replayData?.parsed_data?.game_duration_ms) {
         return true; // Include if we can't determine duration
       }
@@ -59,9 +115,9 @@
       return replayData.parsed_data.game_duration_ms >= 60000;
     });
   });
-  const setReplayData = (matchName: string, data: ReplayDataMinimal) => {
-    if (!matchName) return;
-    replayDataCache.set(matchName, data);
+  const setReplayData = (key: string, data: ReplayDataMinimal) => {
+    if (!key) return;
+    replayDataCache.set(key, data);
     replayDataCache = replayDataCache; // trigger reactivity
   };
 
@@ -101,15 +157,12 @@
             {#each filteredMatches as match}
               <MatchRow
                 {match}
-                replayData={match.name
-                  ? replayDataCache.get(match.name)
-                  : undefined}
+                replayData={replayDataCache.get(match.name || match.id) || undefined}
                 onOpenChat={(msgs) => showChatMessages(msgs)}
-                onSetReplayData={(data) =>
-                  setReplayData(match.name || "", data)}
+                onSetReplayData={(data) => setReplayData(match.name || match.id, data)}
               />
             {/each}
-          {:else if !loading}
+          {:else if !loading && !internalLoading}
             <Table.Row>
               <Table.Cell
                 colspan={9}

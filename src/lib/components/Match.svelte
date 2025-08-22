@@ -40,7 +40,18 @@
 
   let internalReplayData = $state<ReplayDataMinimal | undefined>(replayData);
   let loading = $state(false);
-  const settingsStore = getSettingsStore();
+  const settingsStorePromise = getSettingsStore();
+  let settingsStore: Awaited<ReturnType<typeof getSettingsStore>> | null = null;
+  let loadSettings = async () => {
+    if (!settingsStore) settingsStore = await settingsStorePromise;
+    return settingsStore;
+  };
+  // Track external replayData prop updates (when parent cache fills after row mount)
+  $effect(() => {
+    if (!internalReplayData && replayData) {
+      internalReplayData = replayData;
+    }
+  });
   let isDownloading = $state(false);
 
   let timeAgo: TimeAgo | null = null;
@@ -63,10 +74,8 @@
   };
 
   const downloadReplay = async () => {
-    if (!settingsStore.initialized) {
-      toast.error("Settings not loaded yet. Please try again.");
-      return;
-    }
+    await loadSettings();
+    if (!settingsStore) return;
     if (isDownloading) return;
     isDownloading = true;
     try {
@@ -94,11 +103,18 @@
       const replayDownloadName = generateReplayFilename();
       const result = await invoke<string>("download_file", {
         url: replay.url,
-        destinationPath: settingsStore.getSettings.replayDownloadPath,
+        destinationPath: settingsStore.settings.replayDownloadPath,
         filename: replayDownloadName,
       });
-      toast.success("Replay downloaded successfully", {
-        description: `Saved to: ${result}`,
+      toast.success("Replay downloaded", {
+        action: {
+          label: "Open",
+          onClick: () => {
+            invoke("reveal_in_folder", { path: result }).catch((e) =>
+              console.error("Failed to reveal file", e),
+            );
+          },
+        },
       });
     } catch (error) {
       toast.error("Download failed", { description: String(error) });
@@ -107,24 +123,19 @@
     }
   };
 
+  let lastParseError: string | null = null;
   const maybeParseReplay = async () => {
-    if (internalReplayData || loading || !match.name) return;
+    if (internalReplayData || loading) return;
     loading = true;
-    error = null;
+    lastParseError = null;
     try {
       const replays = await match.replays;
       const replay = replays.anyReplay;
       if (!replay) return;
-
-      // Ensure settings loaded; if not, we still attempt using replayDownloadPath once initialized
-      if (!settingsStore.initialized) {
-        // Wait a short moment for settings to initialize (non-blocking fallback)
-        // This avoids tight loops; we don't spin aggressively.
-      }
-
-      const destinationPath = settingsStore.initialized
-        ? settingsStore.getSettings.replayDownloadPath
-        : ""; // empty falls back to working dir; can be improved
+      await loadSettings();
+      const destinationPath = settingsStore
+        ? settingsStore.settings.replayDownloadPath
+        : ""; // fallback
 
       const sanitizeFilename = (filename: string) =>
         filename.replace(/[<>:"/\\|?*]/g, "_");
@@ -163,7 +174,7 @@
           filename,
         },
       );
-
+      dateDebug("parsed replay", { duration_ms: parsed.duration_ms, start_time_ms: parsed.start_time_ms, filename });
       const mapped: ReplayDataMinimal = {
         parsed_data: {
           game_duration_ms: parsed.duration_ms,
@@ -176,20 +187,63 @@
         },
         timestamp: new Date(parsed.start_time_ms).toISOString(),
       };
+      dateDebug("mapped replayData", mapped.timestamp);
 
       internalReplayData = mapped;
       onSetReplayData?.(mapped);
     } catch (e) {
-      error = String(e);
+      lastParseError = String(e);
+      console.error("Replay parse failed", e);
     } finally {
       loading = false;
     }
   };
 
+  let fallbackReplayDate: Date | null = $state(null);
+
+  // Debug helper (dev only)
+  const dateDebug = (...args: any[]) => {
+    try {
+      if (import.meta.env?.DEV) console.debug("[MatchDate]", ...args);
+    } catch {}
+  };
+
+  // Replace original exactDate derivation with parsed-first priority order
   let exactDate: Date | null = $derived.by(() => {
-    if (match.timestamp) return match.timestamp;
-    if (internalReplayData?.timestamp)
-      return new Date(internalReplayData.timestamp);
+    if (internalReplayData?.timestamp) {
+      const d = new Date(internalReplayData.timestamp);
+      if (!isNaN(d.getTime())) {
+        dateDebug("using parsed replay timestamp", internalReplayData.timestamp);
+        return d;
+      }
+      dateDebug("parsed replay timestamp invalid", internalReplayData.timestamp);
+    }
+    if (match.timestamp instanceof Date) {
+      if (!isNaN(match.timestamp.getTime())) {
+        dateDebug("using match Date timestamp", match.timestamp.toISOString());
+        return match.timestamp;
+      }
+      dateDebug("match Date timestamp invalid", match.timestamp);
+    } else if (match.timestamp && typeof match.timestamp === "string") {
+      const d = new Date(match.timestamp);
+      if (!isNaN(d.getTime())) {
+        dateDebug("using match string timestamp", match.timestamp, d.toISOString());
+        return d;
+      }
+      dateDebug("match string timestamp invalid", match.timestamp);
+    }
+    if (fallbackReplayDate) {
+      if (!isNaN(fallbackReplayDate.getTime())) {
+        dateDebug("using fallback replay timestamp", fallbackReplayDate.toISOString());
+        return fallbackReplayDate;
+      }
+      dateDebug("fallback replay timestamp invalid", fallbackReplayDate);
+    }
+    dateDebug("no valid timestamp found", {
+      internal: internalReplayData?.timestamp,
+      matchTs: match.timestamp,
+      fallback: fallbackReplayDate,
+    });
     return null;
   });
 
@@ -198,10 +252,28 @@
     return timeAgo.format(exactDate);
   });
 
-  onMount(() => {
-    maybeParseReplay();
+  onMount(async () => {
+    // Kick off parse; if it later populates internalReplayData we derive date
+    void maybeParseReplay();
+    // Attempt to grab a replay timestamp immediately (non-blocking)
     try {
-      // Adding locale is idempotent; ignore if already added
+      const replays = await match.replays;
+      const replay = replays.anyReplay;
+      if (replay?.timestamp) {
+        const d = replay.timestamp instanceof Date ? replay.timestamp : new Date(replay.timestamp as any);
+        if (!isNaN(d.getTime())) {
+          fallbackReplayDate = d;
+          dateDebug("captured immediate fallback replay timestamp", d.toISOString());
+        } else {
+          dateDebug("immediate replay timestamp invalid", replay.timestamp);
+        }
+      } else {
+        dateDebug("no immediate replay timestamp available");
+      }
+    } catch (e) {
+      // Silent; date still may come from parse
+    }
+    try {
       TimeAgo.addDefaultLocale(en as any);
     } catch {}
     try {

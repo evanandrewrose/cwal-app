@@ -3,7 +3,7 @@
 
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
-  import type { GravaticBooster, Match, Ranking } from "gravatic-booster";
+  import type { GravaticBooster, Ranking } from "gravatic-booster";
 
   import CountryFlag from "@/lib/components/CountryFlag.svelte";
   import MatchesTable from "@/lib/components/MatchesTable.svelte";
@@ -23,8 +23,6 @@
   let id: string = $derived(data.id);
   let gateway: string = $derived(data.gateway);
 
-  const MATCH_FETCH_NUM = 15;
-
   const gb = getGb();
   const settingsStorePromise = getSettingsStore();
 
@@ -36,10 +34,11 @@
   let ranking: Ranking | null = $state(null);
   let otherRankings: Ranking[] = $state([]);
   let avatar = $derived.by(() => avatarOrDefault(ranking?.avatar));
-  let matchesGenerator: AsyncGenerator<Match, void, void> | null = null;
-  let matches: Match[] = $state([]);
+
+  // Matches now owned/fetched within MatchesTable; we keep a callback reference to trigger loading
+  let matchesTableFetchMore: (() => Promise<boolean>) | null = null;
+
   let scrollableDiv: HTMLDivElement | null = $state(null);
-  let loadingMatches = $state(false);
   let scrollTimeout: number | null = null;
   let hideShortMatches = $state(false);
 
@@ -64,45 +63,13 @@
   });
 
   const fetchMoreMatches = async () => {
-    if (!matchesGenerator) {
-      return false;
-    }
-
-    if (loadingMatches) {
-      return false;
-    }
-
-    loadingMatches = true;
-    let fetchedAny = false;
+    if (!matchesTableFetchMore) return false;
     try {
-      for (let i = 0; i < MATCH_FETCH_NUM; ++i) {
-        const next = await matchesGenerator.next();
-        if (next.done) {
-          break;
-        }
-
-        matches.push(next.value!);
-        fetchedAny = true;
-      }
-    } catch (error) {
-      console.error("Failed to fetch more matches:", error);
-
-      // Match count should never be zero, since they need 5 matches to appear
-      // searchable.
-      if (matches.length === 0) {
-        console.error(
-          "Initial match loading failed, redirecting to error page",
-        );
-        goto(`/error?from=${encodeURIComponent(page.url.pathname)}`);
-        return false;
-      } else {
-        // Log error for background loading when we already have some matches
-        console.error("Failed to load more matches:", error);
-      }
-    } finally {
-      loadingMatches = false;
+      return await matchesTableFetchMore();
+    } catch (e) {
+      console.error("Error invoking MatchesTable fetchMore:", e);
+      return false;
     }
-    return fetchedAny;
   };
 
   const hasScrollbar = () => {
@@ -111,14 +78,11 @@
   };
 
   const fetchUntilScrollbarOrEnd = async () => {
-    const maxIterations = 50; // Prevent infinite loops
-    const maxTimeMs = 30000; // 30 second timeout
+    const maxIterations = 50;
+    const maxTimeMs = 30000;
     const startTime = Date.now();
-
     let iterations = 0;
-
     while (iterations < maxIterations) {
-      // Check timeout
       if (Date.now() - startTime > maxTimeMs) {
         console.warn(
           "fetchUntilScrollbarOrEnd timed out after",
@@ -127,28 +91,17 @@
         );
         break;
       }
-
       try {
         const fetchedMatches = await fetchMoreMatches();
-        if (!fetchedMatches) {
-          break;
-        }
-
-        // Give DOM time to update
-        await sleep(100);
-
-        if (hasScrollbar()) {
-          break;
-        }
+        if (!fetchedMatches) break;
+        await sleep(100); // allow DOM update
+        if (hasScrollbar()) break;
       } catch (error) {
         console.error("Error in fetchUntilScrollbarOrEnd:", error);
-        // Break the loop on error to prevent infinite retry
         break;
       }
-
       iterations++;
     }
-
     if (iterations >= maxIterations) {
       console.warn(
         "fetchUntilScrollbarOrEnd reached maximum iterations:",
@@ -158,30 +111,19 @@
   };
 
   const onScroll = () => {
-    if (!scrollableDiv) {
-      return;
-    }
-
-    // Debounce scroll events to prevent excessive calls
-    if (scrollTimeout) {
-      clearTimeout(scrollTimeout);
-    }
-
+    if (!scrollableDiv) return;
+    if (scrollTimeout) clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
       if (!scrollableDiv) return;
-
       const { scrollHeight, scrollTop, clientHeight } = scrollableDiv;
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-
-      if (distanceFromBottom <= 200 && !loadingMatches) {
+      if (distanceFromBottom <= 200) {
         fetchMoreMatches();
       }
-    }, 100); // 100ms debounce
+    }, 100);
   };
 
   afterNavigate(async () => {
-    matches = [];
-
     try {
       const _gb = await gb;
       profile = await _gb.minimalAccountWithGamesPlayedLastWeek(id, {
@@ -192,7 +134,6 @@
       });
       ranking =
         (await profile.requestedProfile?.ranking(leaderboard.id)) ?? null;
-      // Fetch all rankings for this account and extract other profiles
       try {
         const acct = await profile.requestedProfile?.accountRankings(
           leaderboard.id,
@@ -206,33 +147,31 @@
       } catch (e) {
         console.warn("Failed to load other rankings", e);
       }
-      matchesGenerator =
-        (await profile.requestedProfile?.ladderGames()) ?? null;
-
-      // Try to fetch initial matches
-      try {
-        await fetchUntilScrollbarOrEnd();
-      } catch (matchError) {
-        console.error("Failed to load initial matches:", matchError);
-        // If we can't load any matches at all, redirect to error page
-        goto(`/error?from=${encodeURIComponent(page.url.pathname)}`);
-        return;
+      // Wait for MatchesTable to register its fetcher then load initial entries
+      const start = Date.now();
+      while (!matchesTableFetchMore && Date.now() - start < 5000) {
+        await sleep(50);
+      }
+      if (matchesTableFetchMore) {
+        try {
+          await fetchUntilScrollbarOrEnd();
+        } catch (matchError) {
+          console.error("Failed to load initial matches:", matchError);
+        }
+      } else {
+        console.warn("MatchesTable fetcher not ready; skipping initial fetch");
       }
     } catch (error) {
       console.error("Failed to load player data:", error);
-      // Redirect to error page with current URL context
       goto(`/error?from=${encodeURIComponent(page.url.pathname)}`);
     }
   });
 
   const winPercentage = $derived.by(() => {
     if (ranking?.wins !== undefined && ranking?.losses !== undefined) {
-      if (ranking.losses === 0) {
-        return "100%";
-      }
+      if (ranking.losses === 0) return "100%";
       return `${Math.round((ranking.wins / (ranking.wins + ranking.losses)) * 100)}%`;
     }
-
     return "N/A";
   });
 </script>
@@ -317,9 +256,7 @@
             </div>
 
             <div class="space-y-1">
-              <div class="text-lg font-bold">
-                {winPercentage}
-              </div>
+              <div class="text-lg font-bold">{winPercentage}</div>
               <p class="text-xs text-muted-foreground">
                 Win Rate ({ranking?.wins || 0}W/{ranking?.losses || 0}L)
               </p>
@@ -397,9 +334,9 @@
 
       <div class="flex items-center justify-between bg-muted/20 rounded-lg p-4">
         <div class="space-y-1">
-          <label class="text-sm font-medium" for="hide-short-matches">
-            Hide short matches
-          </label>
+          <label class="text-sm font-medium" for="hide-short-matches"
+            >Hide short matches</label
+          >
           <p class="text-xs text-muted-foreground">
             Hide matches shorter than 1 minute from the list
           </p>
@@ -412,9 +349,10 @@
       </div>
 
       <MatchesTable
-        {matches}
         {hideShortMatches}
+        {profile}
         loading={!profile || !ranking}
+        onFetcherReady={(fn) => (matchesTableFetchMore = fn)}
       />
     </div>
   </div>
