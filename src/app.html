@@ -7,14 +7,16 @@
     <title>Tauri + SvelteKit + Typescript App</title>
     %sveltekit.head%
   </head>
-  <body data-sveltekit-preload-data="hover">
+  <body data-sveltekit-preload-data="hover" class="dark">
     <div style="display: contents">%sveltekit.body%</div>
   </body>
   <script type="text/javascript">
-    //document.addEventListener("DOMContentLoaded", () => {
-    //  document.addEventListener("contextmenu", (e) => {
-    //    e.preventDefault();
-    //  });
-    //});
+    // enable below only in dev mode
+    if (import.meta.env.MODE === "development") {
+      document.addEventListener("DOMContentLoaded", () => {
+        document.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+        });
+      });
   </script>
 </html>
