@@ -5,6 +5,9 @@ import {
     fetch as tauriFetch
 } from '@tauri-apps/plugin-http';
 import { LRUCache } from 'lru-cache';
+import { getLimitsStore } from '@/lib/limits.svelte';
+
+let limits = getLimitsStore();
 
 export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -29,6 +32,7 @@ export class TauriConnection implements IBroodWarConnection {
         for (let i = 0; i < maxAttempts; i++) {
             await sleep(timeout * i);
             try {
+                limits.numApiRequests++;
                 response = await tauriFetch(key, {
                     headers: {
                         Accept: "application/json",

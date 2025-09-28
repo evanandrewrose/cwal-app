@@ -5,7 +5,7 @@
   import { Toaster } from "svelte-sonner";
 
   import TitleBar from "@/lib/components/TitleBar.svelte";
-  import AppSidebar from "@/lib/components/app-sidebar.svelte";
+  import AppSidebar from "@/lib/components/AppSidebar.svelte";
   import * as Sidebar from "@/lib/components/ui/sidebar";
   import { configureReceiveBackendEvents } from "@/lib/scrState.svelte";
 

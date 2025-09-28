@@ -12,7 +12,10 @@
   import { Button } from "@/lib/components/ui/button";
   import { Skeleton } from "@/lib/components/ui/skeleton";
   import * as Tooltip from "@/lib/components/ui/tooltip";
+  import { getLimitsStore } from "@/lib/limits.svelte";
   import { getSettingsStore } from "@/lib/settingsStore.svelte";
+
+  let limits = getLimitsStore();
 
   interface ChatMessage {
     timestamp: number; // ms since game start
@@ -81,14 +84,20 @@
     try {
       const replays = await match.replays;
       const replay = replays.anyReplay;
+
       if (!replay) {
         toast.error("No replay available for this match");
         return;
       }
+
+      limits.numReplayDownloads++;
+
       const sanitizeFilename = (filename: string) =>
         filename.replace(/[<>:"/\\|?*]/g, "_");
+
       const getRaceInitial = (race?: string) =>
         race && race.length > 0 ? race[0].toUpperCase() : "U";
+
       const generateReplayFilename = () => {
         const ts =
           (match.timestamp || replay.timestamp)?.toISOString() || "unknown";
@@ -100,12 +109,15 @@
           `${ts}_${p1Alias}(${p1Race})_vs_${p2Alias}(${p2Race}).rep`,
         );
       };
+
       const replayDownloadName = generateReplayFilename();
+
       const result = await invoke<string>("download_file", {
         url: replay.url,
         destinationPath: settingsStore.settings.replayDownloadPath,
         filename: replayDownloadName,
       });
+
       toast.success("Replay downloaded", {
         action: {
           label: "Open",
@@ -174,11 +186,15 @@
           filename,
         },
       );
+
+      limits.numReplayDownloads++;
+
       dateDebug("parsed replay", {
         duration_ms: parsed.duration_ms,
         start_time_ms: parsed.start_time_ms,
         filename,
       });
+
       const mapped: ReplayDataMinimal = {
         parsed_data: {
           game_duration_ms: parsed.duration_ms,

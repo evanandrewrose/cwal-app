@@ -32,7 +32,7 @@
   >;
 
   interface Props {
-    matches?: Match[]; // deprecated; initial value only
+    matches?: Match[];
     profile?: MinimalAccount | null;
     loading?: boolean;
     hideShortMatches?: boolean;

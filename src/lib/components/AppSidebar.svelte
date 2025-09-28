@@ -6,6 +6,7 @@
 
   import StarCraftStatus from "@/lib/components/StarCraftStatus.svelte";
   import * as Sidebar from "@/lib/components/ui/sidebar";
+  import { getLimitsStore } from "@/lib/limits.svelte";
 
   const items = [
     {
@@ -29,6 +30,11 @@
       icon: SettingsIcon,
     },
   ];
+
+  let apiRequestsData = getLimitsStore();
+
+  let numApiRequests = $derived(apiRequestsData.numApiRequests);
+  let numReplayDownloads = $derived(apiRequestsData.numReplayDownloads);
 </script>
 
 <Sidebar.Root>
@@ -54,6 +60,11 @@
   </Sidebar.Content>
 
   <Sidebar.Footer>
-    <StarCraftStatus />
-  </Sidebar.Footer>
+    <div class="text-xs text-muted-foreground mb-2">
+      API Requests: {numApiRequests}
+      <br />
+      Replay Downloads: {numReplayDownloads}
+      <StarCraftStatus />
+    </div></Sidebar.Footer
+  >
 </Sidebar.Root>
