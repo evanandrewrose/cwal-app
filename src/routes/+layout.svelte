@@ -8,6 +8,12 @@
   import AppSidebar from "@/lib/components/AppSidebar.svelte";
   import * as Sidebar from "@/lib/components/ui/sidebar";
   import { configureReceiveBackendEvents } from "@/lib/scrState.svelte";
+  import TimeAgo from "javascript-time-ago";
+  import en from "javascript-time-ago/locale/en.json";
+
+  try {
+    TimeAgo.addDefaultLocale(en as any);
+  } catch {}
 
   let { children } = $props();
 

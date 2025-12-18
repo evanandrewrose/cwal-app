@@ -4,7 +4,6 @@
   import { invoke } from "@tauri-apps/api/core";
   import type { Match } from "gravatic-booster";
   import TimeAgo from "javascript-time-ago";
-  import en from "javascript-time-ago/locale/en.json";
   import { toast } from "svelte-sonner";
 
   import MapName from "@/lib/components/MapName.svelte";
@@ -57,7 +56,7 @@
   });
   let isDownloading = $state(false);
 
-  let timeAgo: TimeAgo | null = null;
+  let timeAgo = $state<TimeAgo | null>(null);
 
   const formatDuration = (durationMs: number): string => {
     const totalSeconds = Math.floor(durationMs / 1000);
@@ -189,12 +188,6 @@
 
       limits.numReplayDownloads++;
 
-      dateDebug("parsed replay", {
-        duration_ms: parsed.duration_ms,
-        start_time_ms: parsed.start_time_ms,
-        filename,
-      });
-
       const mapped: ReplayDataMinimal = {
         parsed_data: {
           game_duration_ms: parsed.duration_ms,
@@ -207,7 +200,8 @@
         },
         timestamp: new Date(parsed.start_time_ms).toISOString(),
       };
-      dateDebug("mapped replayData", mapped.timestamp);
+
+      trySetDate(parsed.start_time_ms);
 
       internalReplayData = mapped;
       onSetReplayData?.(mapped);
@@ -219,102 +213,48 @@
     }
   };
 
-  let fallbackReplayDate: Date | null = $state(null);
+  let gameDate = $state<Date | null>(null);
 
-  // Debug helper (dev only)
-  const dateDebug = (...args: any[]) => {
-    try {
-      if (import.meta.env?.DEV) console.debug("[MatchDate]", ...args);
-    } catch {}
+  const isValidDate = (d: Date) => {
+    return !isNaN(d.getTime()) && d.getFullYear() > 2000;
+  };
+
+  const trySetDate = (val: Date | string | number | undefined | null) => {
+    if (gameDate && isValidDate(gameDate)) return; // Already have a valid date
+
+    let d: Date | null = null;
+    if (val instanceof Date) d = val;
+    else if (typeof val === "string") d = new Date(val);
+    else if (typeof val === "number") d = new Date(val);
+
+    if (d && isValidDate(d)) {
+      gameDate = d;
+    }
   };
 
   // Replace original exactDate derivation with parsed-first priority order
-  let exactDate: Date | null = $derived.by(() => {
-    if (internalReplayData?.timestamp) {
-      const d = new Date(internalReplayData.timestamp);
-      if (!isNaN(d.getTime())) {
-        dateDebug(
-          "using parsed replay timestamp",
-          internalReplayData.timestamp,
-        );
-        return d;
-      }
-      dateDebug(
-        "parsed replay timestamp invalid",
-        internalReplayData.timestamp,
-      );
-    }
-    if (match.timestamp instanceof Date) {
-      if (!isNaN(match.timestamp.getTime())) {
-        dateDebug("using match Date timestamp", match.timestamp.toISOString());
-        return match.timestamp;
-      }
-      dateDebug("match Date timestamp invalid", match.timestamp);
-    } else if (match.timestamp && typeof match.timestamp === "string") {
-      const d = new Date(match.timestamp);
-      if (!isNaN(d.getTime())) {
-        dateDebug(
-          "using match string timestamp",
-          match.timestamp,
-          d.toISOString(),
-        );
-        return d;
-      }
-      dateDebug("match string timestamp invalid", match.timestamp);
-    }
-    if (fallbackReplayDate) {
-      if (!isNaN(fallbackReplayDate.getTime())) {
-        dateDebug(
-          "using fallback replay timestamp",
-          fallbackReplayDate.toISOString(),
-        );
-        return fallbackReplayDate;
-      }
-      dateDebug("fallback replay timestamp invalid", fallbackReplayDate);
-    }
-    dateDebug("no valid timestamp found", {
-      internal: internalReplayData?.timestamp,
-      matchTs: match.timestamp,
-      fallback: fallbackReplayDate,
-    });
-    return null;
-  });
+  // const exactDate: Date | null = ... (deleted)
 
   let relativeTime = $derived.by(() => {
-    if (!exactDate || !timeAgo) return null;
-    return timeAgo.format(exactDate);
+    if (!gameDate || !timeAgo) return null;
+    return timeAgo.format(gameDate);
   });
 
   onMount(async () => {
-    // Kick off parse; if it later populates internalReplayData we derive date
-    void maybeParseReplay();
+    trySetDate(match.timestamp);
+
     // Attempt to grab a replay timestamp immediately (non-blocking)
     try {
       const replays = await match.replays;
       const replay = replays.anyReplay;
-      if (replay?.timestamp) {
-        const d =
-          replay.timestamp instanceof Date
-            ? replay.timestamp
-            : new Date(replay.timestamp as any);
-        if (!isNaN(d.getTime())) {
-          fallbackReplayDate = d;
-          dateDebug(
-            "captured immediate fallback replay timestamp",
-            d.toISOString(),
-          );
-        } else {
-          dateDebug("immediate replay timestamp invalid", replay.timestamp);
-        }
-      } else {
-        dateDebug("no immediate replay timestamp available");
-      }
+      trySetDate(replay?.timestamp);
     } catch (e) {
       // Silent; date still may come from parse
     }
-    try {
-      TimeAgo.addDefaultLocale(en as any);
-    } catch {}
+
+    // Kick off parse; if it later populates internalReplayData we derive date
+    maybeParseReplay();
+
     try {
       const lang =
         typeof navigator !== "undefined" ? navigator.language : "en-US";
@@ -325,14 +265,14 @@
 
 <tr class="hover:bg-muted/50">
   <td class="font-medium">
-    {#if exactDate && relativeTime}
+    {#if gameDate && relativeTime}
       <Tooltip.Root>
         <Tooltip.Trigger class="text-foreground">
           {relativeTime}
         </Tooltip.Trigger>
         <Tooltip.Content>
           <div class="text-sm">
-            {exactDate.toLocaleString()}
+            {gameDate.toLocaleString()}
           </div>
         </Tooltip.Content>
       </Tooltip.Root>
