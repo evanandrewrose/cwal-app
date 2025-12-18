@@ -1,3 +1,4 @@
+import { getSettingsStore } from '@/lib/settingsStore.svelte';
 import { SCApi, type BroodWarApiPath, type IBroodWarConnection } from 'bw-web-api';
 import { getScrState } from '@/lib/scrState.svelte';
 import { GravaticBooster, SCApiWithCaching } from 'gravatic-booster';
@@ -8,6 +9,13 @@ import { LRUCache } from 'lru-cache';
 import { getLimitsStore } from '@/lib/limits.svelte';
 
 let limits = getLimitsStore();
+let nextRequestTime = 0;
+
+getSettingsStore().then(store => {
+    store.onRateLimitChange(() => {
+        nextRequestTime = 0;
+    });
+});
 
 export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -31,6 +39,20 @@ export class TauriConnection implements IBroodWarConnection {
 
         for (let i = 0; i < maxAttempts; i++) {
             await sleep(timeout * i);
+
+            const settingsStore = await getSettingsStore();
+            const tps = settingsStore.settings.maxApiRequestsTps;
+
+            if (tps > 0) {
+                const now = Date.now();
+                const interval = 1000 / tps;
+                const wait = Math.max(0, nextRequestTime - now);
+                nextRequestTime = Math.max(now, nextRequestTime) + interval;
+                if (wait > 0) {
+                    await sleep(wait);
+                }
+            }
+
             try {
                 limits.numApiRequests++;
                 response = await tauriFetch(key, {

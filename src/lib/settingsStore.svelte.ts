@@ -23,6 +23,12 @@ export class SettingsStore {
         return store;
     }
 
+    private rateLimitListeners: ((tps: number) => void)[] = [];
+
+    onRateLimitChange(callback: (tps: number) => void) {
+        this.rateLimitListeners.push(callback);
+    }
+
     get settings(): AppSettings {
         return this._settings;
     }
@@ -107,6 +113,7 @@ export class SettingsStore {
         try {
             this._settings.maxApiRequestsTps = value;
             await this.saveSettings();
+            this.rateLimitListeners.forEach(cb => cb(value));
             toast.success('API rate preference updated');
         } catch (error) {
             console.error('Failed to update API TPS:', error);
