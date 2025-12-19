@@ -55,7 +55,8 @@
   const playerSearch = debounce(async (searchValue: string) => {
     try {
       const _gb = await gb;
-      if (!searchValue) {
+      if (!searchValue || searchValue.length <= 3) {
+        searchResults = [];
         return;
       }
       searching = true;
@@ -95,7 +96,7 @@
   <div class="absolute overflow-visible w-full">
     <Command.Root
       class="rounded-lg border shadow-md md:min-w-[450px]"
-      shouldFilter={!searching}
+      shouldFilter={false}
     >
       <div bind:clientHeight={inputHeight} class="block">
         <Command.Input
@@ -109,14 +110,13 @@
             <Command.Item>Loading</Command.Item>
           </Command.Group>
         {:else}
-          {#key JSON.stringify(searchResults)}
-            <Command.Group>
-              {#each searchResults as searchResult}
+          <Command.Group>
+            {#each searchResults as searchResult}
+              {#key searchResult.name + "@" + searchResult.gatewayId}
                 <Command.Item
                   class="cursor-pointer p-4"
                   value="{searchResult.name}@{searchResult.gatewayId}"
                   onSelect={() => {
-                    console.log("Item selected:", searchResult);
                     handlePlayerSelect(
                       searchResult.name,
                       `${searchResult.gatewayId}`,
@@ -169,9 +169,9 @@
                     </div>
                   </div>
                 </Command.Item>
-              {/each}
-            </Command.Group>
-          {/key}
+              {/key}
+            {/each}
+          </Command.Group>
         {/if}
       </Command.List>
     </Command.Root>
