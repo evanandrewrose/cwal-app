@@ -1,17 +1,3 @@
 {
-  "svelte.enable-ts-plugin": true,
-  "vite.autoStart": false,
-  "editor.inlineSuggest.enabled": true,
-  "github.copilot.enable": {
-    "*": true,
-    "plaintext": false,
-    "markdown": false,
-    "scminput": false
-  },
-  "terminal.integrated.profiles.windows": {
-    "zsh": {
-      "path": "bash",
-      "args": ["-c", "zsh"]
-    }
-  }
+  "svelte.enable-ts-plugin": true
 }
