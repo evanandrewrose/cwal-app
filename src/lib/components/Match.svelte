@@ -166,6 +166,7 @@
 
       interface DownloadAndParseReplayResponse {
         duration_ms: number;
+        cached: boolean;
         start_time_ms: number;
         chat_messages: Array<{
           sender_name: string;
@@ -186,7 +187,9 @@
         },
       );
 
-      limits.numReplayDownloads++;
+      if (!parsed.cached) {
+        limits.numReplayDownloads++;
+      }
 
       const mapped: ReplayDataMinimal = {
         parsed_data: {
@@ -201,7 +204,7 @@
         timestamp: new Date(parsed.start_time_ms).toISOString(),
       };
 
-      trySetDate(parsed.start_time_ms);
+      trySetDate(new Date(parsed.start_time_ms));
 
       internalReplayData = mapped;
       onSetReplayData?.(mapped);
@@ -219,21 +222,13 @@
     return !isNaN(d.getTime()) && d.getFullYear() > 2000;
   };
 
-  const trySetDate = (val: Date | string | number | undefined | null) => {
-    if (gameDate && isValidDate(gameDate)) return; // Already have a valid date
+  const trySetDate = (val: Date | null | undefined) => {
+    if (!val || (gameDate && isValidDate(gameDate))) return; // Already have a valid date
 
-    let d: Date | null = null;
-    if (val instanceof Date) d = val;
-    else if (typeof val === "string") d = new Date(val);
-    else if (typeof val === "number") d = new Date(val);
-
-    if (d && isValidDate(d)) {
-      gameDate = d;
+    if (isValidDate(val)) {
+      gameDate = val;
     }
   };
-
-  // Replace original exactDate derivation with parsed-first priority order
-  // const exactDate: Date | null = ... (deleted)
 
   let relativeTime = $derived.by(() => {
     if (!gameDate || !timeAgo) return null;

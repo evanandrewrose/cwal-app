@@ -3,6 +3,9 @@
 
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
+  import Bookmark from "@lucide/svelte/icons/bookmark";
+  import BookmarkCheck from "@lucide/svelte/icons/bookmark-check";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import type { GravaticBooster, Ranking } from "gravatic-booster";
 
   import CountryFlag from "@/lib/components/CountryFlag.svelte";
@@ -10,8 +13,16 @@
   import Race from "@/lib/components/icons/race.svelte";
   import Rank from "@/lib/components/icons/rank.svelte";
   import * as Avatar from "@/lib/components/ui/avatar";
+  import Button from "@/lib/components/ui/button/button.svelte";
+  import * as Dialog from "@/lib/components/ui/dialog";
+  import Input from "@/lib/components/ui/input/input.svelte";
+  import Label from "@/lib/components/ui/label/label.svelte";
   import { Skeleton } from "@/lib/components/ui/skeleton";
   import { Switch } from "@/lib/components/ui/switch";
+  import {
+    type SavedPlayersStore,
+    getSavedPlayersStore,
+  } from "@/lib/savedPlayersStore.svelte";
   import { getGb, sleep } from "@/lib/scApi.svelte";
   import { getSettingsStore } from "@/lib/settingsStore.svelte";
   import { avatarOrDefault, debounce } from "@/lib/utils";
@@ -25,7 +36,9 @@
 
   const gb = getGb();
   const settingsStorePromise = getSettingsStore();
+  const savedPlayersStorePromise = getSavedPlayersStore();
 
+  let savedPlayersStore: SavedPlayersStore | null = $state(null);
   let profile: Awaited<
     ReturnType<
       typeof GravaticBooster.prototype.minimalAccountWithGamesPlayedLastWeek
@@ -42,10 +55,25 @@
   let scrollTimeout: number | null = null;
   let hideShortMatches = $state(false);
 
+  // Saved player state
+  let isSaved = $derived.by(() => {
+    if (!savedPlayersStore || !profile?.auroraId) return false;
+    return savedPlayersStore.isSaved(profile.auroraId);
+  });
+
+  let savedDetails = $derived.by(() => {
+    if (!savedPlayersStore || !profile?.auroraId) return null;
+    return savedPlayersStore.getPlayer(profile.auroraId);
+  });
+
+  let showEditAliasOpen = $state(false);
+  let editAliasValue = $state("");
+
   onMount(async () => {
     try {
       const store = await settingsStorePromise;
       hideShortMatches = store.settings.hideShortReplays;
+      savedPlayersStore = await savedPlayersStorePromise;
     } catch (e) {
       console.error("Failed to load settings for player page", e);
     }
@@ -61,6 +89,66 @@
   $effect(() => {
     updateHideShortMatches(hideShortMatches);
   });
+
+  // Helper to extract known profiles from current state
+  const getAllKnownProfiles = () => {
+    const currentProps = {
+      toon: id,
+      gateway: Number.parseInt(gateway),
+      lastViewed: Date.now(),
+      race: ranking?.featureRace,
+      avatarUrl: avatarOrDefault(ranking?.avatar),
+    };
+    const others = otherRankings.map((r) => ({
+      toon: r.toon,
+      gateway:
+        typeof r.gatewayId === "string"
+          ? Number.parseInt(r.gatewayId)
+          : Number(r.gatewayId),
+      lastViewed: Date.now(),
+      race: r.featureRace,
+      avatarUrl: avatarOrDefault(r.avatar),
+    }));
+    return [currentProps, ...others];
+  };
+
+  // Auto-add profiles if player is saved
+  $effect(() => {
+    if (
+      savedPlayersStore &&
+      profile?.auroraId &&
+      savedPlayersStore.isSaved(profile.auroraId)
+    ) {
+      savedPlayersStore.setProfiles(profile.auroraId, getAllKnownProfiles());
+    }
+  });
+
+  const toggleSave = () => {
+    if (!savedPlayersStore || !profile?.auroraId) return;
+    if (isSaved) {
+      savedPlayersStore.removePlayer(profile.auroraId);
+    } else {
+      const initialProfiles = getAllKnownProfiles();
+      // savePlayer creates the player record if needed
+      savedPlayersStore.savePlayer(profile.auroraId, id, initialProfiles[0]);
+      // setProfiles ensures the full list is synced (removing any old ones if re-saving, and adding all new ones)
+      savedPlayersStore.setProfiles(profile.auroraId, initialProfiles);
+    }
+  };
+
+  const openEditAlias = () => {
+    if (savedDetails) {
+      editAliasValue = savedDetails.alias;
+      showEditAliasOpen = true;
+    }
+  };
+
+  const saveAlias = () => {
+    if (savedPlayersStore && profile?.auroraId) {
+      savedPlayersStore.renamePlayer(profile.auroraId, editAliasValue);
+      showEditAliasOpen = false;
+    }
+  };
 
   const fetchMoreMatches = async () => {
     if (!matchesTableFetchMore) return false;
@@ -181,6 +269,26 @@
   <meta name="description" content="Player details page" />
 </svelte:head>
 
+<Dialog.Root bind:open={showEditAliasOpen}>
+  <Dialog.Content class="sm:max-w-[425px]">
+    <Dialog.Header>
+      <Dialog.Title>Edit Alias</Dialog.Title>
+      <Dialog.Description>
+        Make changes to the player alias here. Click save when you're done.
+      </Dialog.Description>
+    </Dialog.Header>
+    <div class="grid gap-4 py-4">
+      <div class="grid grid-cols-4 items-center gap-4">
+        <Label for="name" class="text-right">Alias</Label>
+        <Input id="name" bind:value={editAliasValue} class="col-span-3" />
+      </div>
+    </div>
+    <Dialog.Footer>
+      <Button type="submit" onclick={saveAlias}>Save changes</Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>
+
 {#key id + gateway}
   <div
     class="w-full h-[100vh] overflow-y-scroll scroll-smooth pb-8"
@@ -211,6 +319,35 @@
                   >
                     <Race race={ranking.featureRace} />
                   </div>
+                {/if}
+                {#if savedPlayersStore}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    class="h-9 w-9 cursor-pointer"
+                    onclick={toggleSave}
+                  >
+                    {#if isSaved}
+                      <BookmarkCheck class="h-4 w-4 text-green-500" />
+                    {:else}
+                      <Bookmark class="h-4 w-4" />
+                    {/if}
+                  </Button>
+                  {#if isSaved}
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm text-muted-foreground"
+                        >Saved as: {savedDetails?.alias}</span
+                      >
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="h-6 w-6"
+                        onclick={openEditAlias}
+                      >
+                        <Pencil class="h-3 w-3" />
+                      </Button>
+                    </div>
+                  {/if}
                 {/if}
               </div>
               {#if profile?.battleTag}
@@ -293,6 +430,9 @@
               <a
                 href="/player/{r.gatewayId}/{r.toon}"
                 class="flex items-center gap-3 p-3 rounded-md bg-background hover:bg-muted transition-colors"
+                onclick={(e) => {
+                  /* handled by default nav */
+                }}
               >
                 <Avatar.Root class="w-8 h-8 rounded-md">
                   <Avatar.Image

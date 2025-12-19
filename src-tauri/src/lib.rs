@@ -130,6 +130,7 @@ struct DownloadAndParseReplayResponse {
     duration_ms: u32,
     start_time_ms: u64,
     chat_messages: Vec<ParsedChatMessage>,
+    cached: bool,
 }
 
 fn parse_replay_bytes(bytes: &[u8]) -> Result<(u32, u64, Vec<ParsedChatMessage>), String> {
@@ -170,13 +171,15 @@ async fn download_and_parse_replay(
     use tauri_plugin_http::reqwest;
 
     // Acquire bytes from cache or network
-    let bytes: Vec<u8> = if let Some(cached) = cache.get(&url) {
+    let cached_path = cache.get(&url);
+    let cached = cached_path.is_some();
+    let bytes: Vec<u8> = if let Some(ref cached_path) = cached_path {
         println!(
             "[replay-cache] Parse using cached file for {} -> {}",
             url,
-            cached.display()
+            cached_path.display()
         );
-        fs::read(&cached).map_err(|e| format!("Failed to read cached file: {}", e))?
+        fs::read(cached_path).map_err(|e| format!("Failed to read cached file: {}", e))?
     } else {
         println!("[replay-cache] No cache for {}, downloading for parse", url);
         let client = reqwest::Client::new();
@@ -205,6 +208,7 @@ async fn download_and_parse_replay(
         duration_ms,
         start_time_ms,
         chat_messages,
+        cached,
     })
 }
 

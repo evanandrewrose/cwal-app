@@ -4,12 +4,10 @@
   "description": "",
   "type": "module",
   "scripts": {
-    "dev": "make dev",
-    "build": "make build-frontend",
-    "preview": "make preview",
-    "check": "make check-frontend",
-    "check:watch": "make check-watch",
-    "tauri": "make tauri"
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
   },
   "license": "MIT",
   "dependencies": {

@@ -124,8 +124,10 @@
   });
   const setReplayData = (key: string, data: ReplayDataMinimal) => {
     if (!key) return;
-    replayDataCache.set(key, data);
-    replayDataCache = replayDataCache; // trigger reactivity
+    const newCache = new Map(replayDataCache);
+    newCache.set(key, data);
+    // trigger reactivity
+    replayDataCache = newCache;
   };
 
   const showChatMessages = (chatMessages: ChatMessage[]) => {

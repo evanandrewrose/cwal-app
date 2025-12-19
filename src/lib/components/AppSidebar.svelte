@@ -2,6 +2,7 @@
   import MapIcon from "@lucide/svelte/icons/map";
   import SearchIcon from "@lucide/svelte/icons/search";
   import SettingsIcon from "@lucide/svelte/icons/settings";
+  import UserIcon from "@lucide/svelte/icons/user";
   import LadderIcon from "@lucide/svelte/icons/waves-ladder";
 
   import RequestsStatus from "@/lib/components/RequestsStatus.svelte";
@@ -14,6 +15,11 @@
       title: "Search",
       url: "/search",
       icon: SearchIcon,
+    },
+    {
+      title: "Saved Players",
+      url: "/saved-players",
+      icon: UserIcon,
     },
     {
       title: "Ladder",

@@ -123,12 +123,9 @@ const createGB = async (port: number): Promise<GravaticBooster> =>
 const scrState = getScrState();
 
 // Resolves when scrState.port is available
-export const getGb = (): Promise<GravaticBooster> => {
-  return new Promise((resolve) => {
-    $effect(() => {
-      if (scrState.port) {
-        resolve(createGB(scrState.port));
-      }
-    });
-  });
+export const getGb = async (): Promise<GravaticBooster> => {
+  while (!scrState.port) {
+    await sleep(200);
+  }
+  return createGB(scrState.port);
 };
