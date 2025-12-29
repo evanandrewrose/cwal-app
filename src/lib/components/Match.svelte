@@ -39,7 +39,13 @@
     isBlurred?: boolean;
   }
 
-  const { match, replayData, onOpenChat, onSetReplayData, isBlurred = false }: Props = $props();
+  const {
+    match,
+    replayData,
+    onOpenChat,
+    onSetReplayData,
+    isBlurred = false,
+  }: Props = $props();
 
   let internalReplayData = $state<ReplayDataMinimal | undefined>(
     untrack(() => replayData),

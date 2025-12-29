@@ -10,7 +10,7 @@ export interface AppSettings {
 }
 
 export class SettingsStore {
-  private constructor(private _settings: AppSettings) { }
+  private constructor(private _settings: AppSettings) {}
 
   static create = async () => {
     const settings = await SettingsStore.loadSettings();
