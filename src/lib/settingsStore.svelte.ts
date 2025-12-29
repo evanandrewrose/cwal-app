@@ -10,7 +10,7 @@ export interface AppSettings {
 }
 
 export class SettingsStore {
-  private constructor(private _settings: AppSettings) {}
+  private constructor(private _settings: AppSettings) { }
 
   static create = async () => {
     const settings = await SettingsStore.loadSettings();
@@ -66,7 +66,7 @@ export class SettingsStore {
       replayDownloadPath: `${home}\\StarCraft\\Maps\\Replays\\CWAL`,
       mapDownloadPath: `${home}\\StarCraft\\Maps\\CWAL`,
       hideShortReplays: true,
-      maxApiRequestsTps: 1,
+      maxApiRequestsTps: 10,
     };
   };
 
